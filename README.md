@@ -1,2 +1,0 @@
-# astroSim
-Astro Research Project

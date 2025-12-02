@@ -13,6 +13,7 @@
 #include <random>
 #include <filesystem>
 #include <cstdlib>
+#include <iomanip>
 
 
 #include <Eigen/Dense>
@@ -43,12 +44,12 @@ const double G = 1; // Arbitrary for now
 const double pi = 3.14159265;
 
 // Display output dimensions
-const int screenH = 600;
-const int screenW = 600;
+const int screenH = 900;
+const int screenW = 900;
 
-/// Object space "view" dimensions
-const int viewH = 20;
-const int viewW = 20;
+/// Object space "view" dimensions -> [0, 10] x [0, 10]
+const int viewH = 10;
+const int viewW = 10;
 
 
 void draw_frames(const vector<vector<Vec2>>& positions, const std::string& folder, int frames) {
@@ -65,15 +66,13 @@ void draw_frames(const vector<vector<Vec2>>& positions, const std::string& folde
         cairo_set_source_rgb(cr, 0, 0, 0);
         cairo_paint(cr);
 
-
         int cFrame = i*frameSkip;
-
 
         // draw particles
         cairo_set_source_rgb(cr, 1,1,1);
         for (auto& p : positions[cFrame]) {
-            double px = (p[0])/viewW * screenW;  // map [0,20] -> [0,width]
-            double py = screenH-((p[1])/viewH * screenH); // map [0,20] -> [0,height]
+            double px = (p[0])/(viewW) * screenW;  // map [0,1] -> [0,width]
+            double py = screenH-((p[1])/(viewH) * screenH); // map [0,1] -> [0,height]
             cairo_arc(cr, px, py, 3, 0, 2*pi);
             cairo_fill(cr);
         }
@@ -88,29 +87,27 @@ void draw_frames(const vector<vector<Vec2>>& positions, const std::string& folde
 
 
 int main() {
-    const int N = 10;
+    const int N = 100;
     vector<Body> bodies(N);
 
-    // bodies[0] = Body{10, Vec2(18, 10), Vec2(0, 0)};
-    // bodies[1] = Body{10, Vec2(2, 2), Vec2(5, 0)};
-    // bodies[2] = Body{10, Vec2(10, 10), Vec2(0, 0)};
-    // bodies[3] = Body{10, Vec2(2, 10), Vec2(0, 0)};
 
     for(int b = 0; b < N; b++) {
-        bodies[b] = Body{10, Vec2(randDist(rng)*20, randDist(rng)*20), Vec2(0, 0)};
+        bodies[b] = Body{0.5, Vec2(randDist(rng)*viewW, randDist(rng)*viewH), Vec2(0, 0)};
     }
 
     vector<vector<double>> extForces(1);
     extForces[0] = {0, 0};
 
+    const bool BORDER_COLLIDE = false;
+
     double collisionRad = 0.1;
 
     double t = 0;
-    int endT = 10;
-    double dt = 1e-6;
+    double endT = 10;
+    double dt = 1e-5;
     int timeSteps = (endT-t)/dt;
 
-    const double gravEpsilon = 0.1;
+    const double gravEpsilon = 0.05;
     const double gravEpsilon2 = pow(gravEpsilon, 2);
 
 
@@ -119,6 +116,14 @@ int main() {
     vector<vector<Vec2>> positions(timeSteps, vector<Vec2>(N));
 
     for (int frame=0; frame < timeSteps; frame++) {
+        bool INFO_FLAG = false;
+        double potEnergy = 0;
+        double kinEnergy = 0;
+
+        if(frame%((int)timeSteps/10) == 0) {
+            INFO_FLAG = true;
+            cout << (int)(100 * frame/timeSteps) << "\% complete" << endl;
+        }
         double ti = t + dt;
         // update particles positions
         for (int i = 0; i < N; i++) {
@@ -138,9 +143,12 @@ int main() {
                 // if(distSq <= pow(collisionRad, 2)) {
                 //     collide = true;
                 // }
-
                 // Softened gravity: G * m1 * m2 * r/((r^2+eps^2)^3/2)
                 double gravMag = G * bodies[j].mass * bodies[i].mass * (sqrt(distSq)) / pow(distSq + gravEpsilon2, 1.5);
+                if(INFO_FLAG) {
+                    potEnergy += -1 * G * bodies[j].mass * bodies[i].mass / pow(distSq + gravEpsilon2, 0.5);
+                }
+                // double gravMag = G * bodies[j].mass * bodies[i].mass / distSq;
                 accel[0] += (dir[0]/sqrt(distSq)) * gravMag;
                 accel[1] += (dir[1]/sqrt(distSq)) * gravMag;
             }
@@ -156,26 +164,38 @@ int main() {
             bodies[i].pos[0] += bodies[i].vel[0]*dt;
             bodies[i].pos[1] += bodies[i].vel[1]*dt;
 
-            if((bodies[i].pos[1] < 0) && (bodies[i].vel[1] < 0)) {
-                bodies[i].vel[1] *= -1;
+            if(INFO_FLAG) {
+                kinEnergy += 1/2 * bodies[i].mass * sqrt(pow(bodies[i].vel[0], 2) + pow(bodies[i].vel[1], 2));
             }
-            else if((bodies[i].pos[1] > viewH) && (bodies[i].vel[1] > 0)) {
-                bodies[i].vel[1] *= -1;
-            }
-            else if((bodies[i].pos[0] < 0) && (bodies[i].vel[0] < 0)) {
-                bodies[i].vel[0] *= -1;
-            }
-            else if((bodies[i].pos[0] > viewW) && (bodies[i].vel[0] > 0)) {
-                bodies[i].vel[0] *= -1;
+
+            if(BORDER_COLLIDE) {
+                if((bodies[i].pos[1] < 0) && (bodies[i].vel[1] < 0)) {
+                    bodies[i].vel[1] *= -1;
+                }
+                else if((bodies[i].pos[1] > viewH) && (bodies[i].vel[1] > 0)) {
+                    bodies[i].vel[1] *= -1;
+                }
+                else if((bodies[i].pos[0] < 0) && (bodies[i].vel[0] < 0)) {
+                    bodies[i].vel[0] *= -1;
+                }
+                else if((bodies[i].pos[0] > viewW) && (bodies[i].vel[0] > 0)) {
+                    bodies[i].vel[0] *= -1;
+                }
             }
             positions[frame][i] = bodies[i].pos;
+        }
+        
+        if(INFO_FLAG) {
+            cout << "Energy: " ;
+            cout << scientific << kinEnergy + potEnergy << endl;
         }
     }
 
     cout << "Simulation complete, begin drawing" << endl;
 
-    int FPS = 30;
-    int nFrames = endT * FPS;
+    int FPS = 30; // frame display speed
+    double playback = 1; //inverse
+    int nFrames = endT * FPS * playback;
 
     draw_frames(positions, "output/", nFrames);
 

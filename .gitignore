@@ -2,6 +2,9 @@
 *build
 *output
 *movie.gif
+a.out
+
+venv
 
 CMakeLists.txt.user
 CMakeCache.txt
