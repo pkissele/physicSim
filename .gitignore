@@ -1,6 +1,7 @@
 .vscode
 *build
 *output
+*outputFrames
 *movie.gif
 a.out
 
