@@ -76,7 +76,7 @@ GLuint create_program(const string& vs_path, const string& fs_path) {
 int main(int argc, char** argv) {
     // Simulation parameters
     const int N = 100;
-    const double mass = 0.01;
+    const double mass = 0.001;
 
     // runtime options
     bool save_frames = false;

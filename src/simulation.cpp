@@ -1,21 +1,27 @@
 #include "simulation.h"
+
 #include <random>
 #include <vector>
 #include <cmath>
 #include <iostream>
 #include <iomanip>
 
+#include "utils.h"
+#include "body.h"
+#include "consts.h"
+
+using namespace Consts;
 
 using namespace std;
 
-const double G = 1.0; // gravitational constant for simulation
-const double pi = 3.14159265358979323846;
+// const double G = 1.0; // gravitational constant for simulation
+// const double pi = 3.14159265358979323846;
 const double collisionRad = 0.1;
 
-double gravEpsilon = 0.1;
+double gravEpsilon = 0.05;
 double gravEpsilon2 = pow(gravEpsilon, 2);
 
-double stepFrac = 100; // Janky sub-stepping
+double stepFrac = 10; // Janky sub-stepping
 
 mt19937 rng(random_device{}());
 uniform_real_distribution<double> randDist(0.0, 1.0);
@@ -29,16 +35,28 @@ NBodySimulation::NBodySimulation(int N_, double mass, double viewW_, double view
         bodies[i].mass = mass;
     }
 
-    // Create more massive bodies
-    bodies[0].mass = 100;
+    // Create massive body
+    bodies[0].mass = 10;
+    // bodies[1].mass = 1;
 
     Vec2 comPos = {0, 0};
     Vec2 comVel = {0, 0};
     double totMass = 0;
 
+    double initVelScale = 1;
+    double diskScale = 4;
+
     for (int i = 0; i < N; ++i) {
-        bodies[i].pos = Vec2(randDist(rng) * viewW, randDist(rng) * viewH);
-        bodies[i].vel = Vec2(0.0, 0.0);
+        if(i != 0) {
+            randDisk(&bodies[i], diskScale, bodies[0].mass);
+        }
+        // bodies[i].pos *= min(viewW, viewH)/4;
+        bodies[i].vel *= initVelScale;
+        // bodies[i].pos = randDisk() * min(viewW, viewH)/2;
+        // bodies[i].pos = Vec2(randDist(rng) * viewW, randDist(rng) * viewH);
+        // bodies[i].vel = randDisk() * initVelScale;
+        // bodies[i].vel = Vec2(randDist(rng) * initVelScale, randDist(rng) * initVelScale);
+        // bodies[i].vel = Vec2(0.0, 0.0);
         comPos += bodies[i].pos * bodies[i].mass;
         comVel += bodies[i].vel * bodies[i].mass;
         totMass += bodies[i].mass;

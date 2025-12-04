@@ -5,11 +5,36 @@
 #include <sstream>
 #include <vector>
 #include <string>
+#include <random>
 
 #include <png.h>
 #include <GLFW/glfw3.h>
 
+#include "body.h"
+#include "consts.h"
+
+using namespace Consts;
+
 using namespace std;
+
+using Vec2 = Eigen::Vector2d;
+
+mt19937_64 rngBody(random_device{}());
+uniform_real_distribution<double> dist01(0.0, 1.0);
+
+void randDisk(Body* b, double maxRad, double centMass) {
+    double theta = dist01(rngBody) * 2.0 * M_PI;
+    double r = maxRad * sqrt(dist01(rngBody));
+
+    Vec2 pos(r * cos(theta), r * sin(theta));
+
+    // Perpendicular tangential velocity
+    Vec2 vel(-pos[1], pos[0]);
+    vel = sqrt(G*centMass/r) * vel.normalized();
+
+    b->pos = pos;
+    b->vel = vel;
+}
 
 string load_file(const string& path) {
     ifstream in(path);

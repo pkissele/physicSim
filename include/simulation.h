@@ -2,13 +2,9 @@
 #include <vector>
 #include <Eigen/Dense>
 
-using Vec2 = Eigen::Vector2d;
+#include "body.h"
 
-struct Body {
-    double mass;
-    Vec2 pos;
-    Vec2 vel;
-};
+using Vec2 = Eigen::Vector2d;
 
 class NBodySimulation {
     public:
