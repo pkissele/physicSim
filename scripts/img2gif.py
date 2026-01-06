@@ -15,7 +15,7 @@ if len(argv) > 3:
     durationLen = float(argv[3])
 
 for j in range(numframes):
-    num = f'{j}'
+    num = f'{j:05d}'
     img = Image.open(f'{folderName}/{prefix}{num}.png')
     ani.append(img.copy())
 

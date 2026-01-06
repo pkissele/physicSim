@@ -24,8 +24,8 @@ using namespace std;
 using Vec2 = Eigen::Vector2d;
 
 // view
-const double viewW = 10.0;
-const double viewH = 10.0;
+const double viewW = 20.0;
+const double viewH = 20.0;
 
 // window size
 const int screenW = 900;
@@ -75,8 +75,8 @@ GLuint create_program(const string& vs_path, const string& fs_path) {
 
 int main(int argc, char** argv) {
     // Simulation parameters
-    const int N = 100;
-    const double mass = 0.001;
+    const int N = 1000;
+    const double mass = 0.0015;
 
     // runtime options
     bool save_frames = false;

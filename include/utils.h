@@ -6,7 +6,9 @@
 
 using Vec2 = Eigen::Vector2d;
 
-void randDisk(Body* b, double maxRad, double centMass);
+void randDisk(Body* b, double maxRad, double centMass, double pMass, int N);
+
+void setOrbitalVel(Body* b, Vec2* acc, Vec2* centPos);
 
 std::string load_file(const std::string& path);
 

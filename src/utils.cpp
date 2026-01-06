@@ -22,18 +22,23 @@ using Vec2 = Eigen::Vector2d;
 mt19937_64 rngBody(random_device{}());
 uniform_real_distribution<double> dist01(0.0, 1.0);
 
-void randDisk(Body* b, double maxRad, double centMass) {
+void randDisk(Body* b, double maxRad, double centMass, double pMass, int N) {
     double theta = dist01(rngBody) * 2.0 * M_PI;
     double r = maxRad * sqrt(dist01(rngBody));
 
+    // double totMass = centMass + pMass*N*pow(r, 2)/(pow(maxRad, 2));
     Vec2 pos(r * cos(theta), r * sin(theta));
 
-    // Perpendicular tangential velocity
-    Vec2 vel(-pos[1], pos[0]);
-    vel = sqrt(G*centMass/r) * vel.normalized();
-
     b->pos = pos;
-    b->vel = vel;
+}
+
+void setOrbitalVel(Body* b, Vec2* acc, Vec2* centPos) {
+    Vec2 r = b->pos - *centPos;
+    double radAccel = (*acc).dot(r.normalized());
+
+    Vec2 nVel(-r[1], r[0]);
+    nVel = sqrt(abs(r.norm()*radAccel)) * nVel.normalized();
+    b->vel = nVel;
 }
 
 string load_file(const string& path) {
