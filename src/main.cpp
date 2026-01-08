@@ -27,6 +27,9 @@ using Vec2 = Eigen::Vector2d;
 const double viewW = 20.0;
 const double viewH = 20.0;
 
+double displayW = viewW;
+double displayH = viewH;
+
 // window size
 const int screenW = 900;
 const int screenH = 900;
@@ -75,8 +78,9 @@ GLuint create_program(const string& vs_path, const string& fs_path) {
 
 int main(int argc, char** argv) {
     // Simulation parameters
-    const int N = 1000;
-    const double mass = 0.0015;
+    const int N = 5000;
+    const double mass = 0.0005;
+    const double size = 6;
 
     // runtime options
     bool save_frames = false;
@@ -152,6 +156,14 @@ int main(int argc, char** argv) {
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
 
+    GLuint sizeVBO;
+    glGenBuffers(1, &sizeVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, sizeVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * N, NULL, GL_DYNAMIC_DRAW);
+
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(float), (void*)0);
+
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 
@@ -181,14 +193,14 @@ int main(int argc, char** argv) {
     if (!filesystem::exists(outdir)) {
         filesystem::create_directory(outdir);
     }
-    const int FPS_TARGET = 30;
+    const int FPS_TARGET = 60;
 
     double t = 0.0;
     // double dt = 1e-2; 
     double dt = (double)1/FPS_TARGET;
     const double FRAME_TARGET = 1000/FPS_TARGET;
 
-    NBodySimulation sim(N, mass, viewW, viewH);
+    NBodySimulation sim(N, mass, size, viewW, viewH);
 
     // parse optional args
     for (int i=1;i<argc;i++){
@@ -222,37 +234,49 @@ int main(int argc, char** argv) {
 
         const auto& bodies = sim.getBodies();
 
+        int aliveN = sim.getAlive();
+
         // Prepare data for GPU: convert body positions to NDC [-1,1]
-        vector<float> ndc(2 * N);
-        for (int i = 0; i < N; ++i) {
-            float nx = (float)((bodies[i].pos[0] / viewW) * 2.0 - 1.0);
-            float ny = (float)((bodies[i].pos[1] / viewH) * 2.0 - 1.0);
-            // OpenGL's NDC y axis is + up; we are mapping [0,viewH] to [-1,1] so it's fine
+        vector<float> ndc(2 * aliveN);
+        for (int i = 0; i < aliveN; ++i) {
+            float nx = (float)(((bodies[i].pos[0] + 0.5*(displayW-viewW)) / displayW) * 2.0 - 1.0);
+            float ny = (float)(((bodies[i].pos[1] + 0.5*(displayH-viewH)) / displayH) * 2.0 - 1.0);
             ndc[2*i+0] = nx;
             ndc[2*i+1] = ny;
         }
 
-        vector<float> vel(2 * N);
-        for(int i = 0; i < N; ++i) {
+        vector<float> vel(2 * aliveN);
+        for(int i = 0; i < aliveN; ++i) {
             float vx = (float)(bodies[i].vel[0]);
             float vy = (float)(bodies[i].vel[1]);
             vel[2*i+0] = vx;
             vel[2*i+1] = vy;
         }
 
+        vector<float> sizeNDC(aliveN);
+        for(int i = 0; i < aliveN; ++i) {
+            float s = (float)(bodies[i].size * (viewH/displayH));
+            sizeNDC[i] = s;
+            // cout << s << endl;
+        }
+
         // upload positions to vbo
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * 2 * N, ndc.data());
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * 2 * aliveN, ndc.data());
         glBindBuffer(GL_ARRAY_BUFFER, 0);
 
         // upload velocities to vbo
         glBindBuffer(GL_ARRAY_BUFFER, velVBO);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * 2 * N, vel.data());
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * 2 * aliveN, vel.data());
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+        glBindBuffer(GL_ARRAY_BUFFER, sizeVBO);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * aliveN, sizeNDC.data());
         glBindBuffer(GL_ARRAY_BUFFER, 0);
 
         // render
-        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
+        // glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+        // glClear(GL_COLOR_BUFFER_BIT);
 
         glUseProgram(bgProgram);
         glBindVertexArray(quadVAO);
@@ -263,8 +287,8 @@ int main(int argc, char** argv) {
         glBindVertexArray(vao);
 
         // set uniforms
-        GLint loc_size = glGetUniformLocation(program, "pointSize");
-        glUniform1f(loc_size, point_screen_size);
+        // GLint loc_size = glGetUniformLocation(program, "pointSize");
+        // glUniform1f(loc_size, point_screen_size);
 
         GLint loc_color = glGetUniformLocation(program, "color");
         glUniform3f(loc_color, 1.0f, 1.0f, 1.0f);
@@ -283,14 +307,12 @@ int main(int argc, char** argv) {
             save_framebuffer_png(ss.str(), screenW, screenH);
             ++frame_idx;
             save_single_frame = false;
-            // if continuous saving, keep saving every frame; if toggled off, it stops
         }
 
         // key toggles
         glfwPollEvents();
         if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
             pause_sim = !pause_sim;
-            // small delay to avoid flipping many times on a single press: busy-waiting isn't ideal, but ok for demo
             this_thread::sleep_for(chrono::milliseconds(150));
             cout << "Pause: " << (pause_sim ? "ON" : "OFF") << endl;
         }
@@ -303,10 +325,19 @@ int main(int argc, char** argv) {
             save_single_frame = true;
             this_thread::sleep_for(chrono::milliseconds(100));
         }
+        if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
+            cout << "up arrow" << endl;
+            displayW *= 0.66;
+            displayH *= 0.66;
+        }
+        if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
+            cout << "down arrow" << endl;
+            displayW *= 1.5;
+            displayH *= 1.5;
+        }
  
-        // time gating to keep simulation and rendering steady (simple)
-        double now = glfwGetTime();                 // seconds (double)
-        double elapsed = (now - lastTime) * 1000.0; // convert to ms
+        double now = glfwGetTime();
+        double elapsed = (now - lastTime) * 1000.0;
         lastTime = now;
 
         if (elapsed < FRAME_TARGET) {
@@ -318,6 +349,8 @@ int main(int argc, char** argv) {
     }
 
     // cleanup
+    glDeleteBuffers(1, &sizeVBO);
+    glDeleteBuffers(1, &velVBO);
     glDeleteBuffers(1, &vbo);
     glDeleteVertexArrays(1, &vao);
     glDeleteProgram(program);

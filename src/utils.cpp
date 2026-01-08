@@ -24,7 +24,8 @@ uniform_real_distribution<double> dist01(0.0, 1.0);
 
 void randDisk(Body* b, double maxRad, double centMass, double pMass, int N) {
     double theta = dist01(rngBody) * 2.0 * M_PI;
-    double r = maxRad * sqrt(dist01(rngBody));
+    // double r = 3.0;
+    double r = maxRad * pow(dist01(rngBody), 0.5);
 
     // double totMass = centMass + pMass*N*pow(r, 2)/(pow(maxRad, 2));
     Vec2 pos(r * cos(theta), r * sin(theta));

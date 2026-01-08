@@ -16,7 +16,7 @@ using namespace std;
 
 const double collisionRad = 0.1;
 
-double gravEpsilon = 0.1;
+double gravEpsilon = 0.2;
 double gravEpsilon2 = pow(gravEpsilon, 2);
 
 double stepFrac = 1; // Janky sub-stepping
@@ -25,6 +25,10 @@ mt19937 rng(random_device{}());
 uniform_real_distribution<double> randDist(0.0, 1.0);
 
 using Vec2 = Eigen::Vector2d;
+
+void NBodySimulation::deleteBody(int index) {
+    // if(index != )
+}
 
 vector<Vec2> NBodySimulation::computeAccelerations(bool DO_INFO = false, double &potEnergy = *(new double)) {
     vector<Vec2> accel(N, Vec2(0.0, 0.0));
@@ -54,27 +58,33 @@ vector<Vec2> NBodySimulation::computeAccelerations(bool DO_INFO = false, double 
 }
 
 
-NBodySimulation::NBodySimulation(int N_, double mass, double viewW_, double viewH_)
+NBodySimulation::NBodySimulation(int N_, double mass, double size, double viewW_, double viewH_)
     : N(N_), viewW(viewW_), viewH(viewH_) {
-    bodies.resize(N);
-    for(int i = 0; i < N; ++i) {
+
+    aliveN = N;
+
+    bodies.resize(aliveN);
+    for(int i = 0; i < aliveN; ++i) {
         bodies[i].mass = mass;
+        bodies[i].size = size;
     }
 
     // Create massive body
     bodies[0].mass = 10;
-    // bodies[1].mass = 1;
+    bodies[0].size = 5 * size;
+    bodies[1].mass = 10;
+    bodies[1].size = 5 * size;
 
     Vec2 comPos = {0, 0};
     Vec2 comVel = {0, 0};
     double totMass = 0;
 
     double initVelScale = 1;
-    double diskScale = 4;
+    double diskScale = 2; 
 
     diskScale = min(viewW, viewH)/2;
 
-    for (int i = 0; i < N; ++i) {
+    for (int i = 0; i < aliveN; ++i) {
         if(i != 0) {
             randDisk(&bodies[i], diskScale, bodies[0].mass, mass, N);
         }
@@ -87,7 +97,7 @@ NBodySimulation::NBodySimulation(int N_, double mass, double viewW_, double view
 
     accel = computeAccelerations();
 
-    for (int i = 0; i < N; ++i) {
+    for (int i = 0; i < aliveN; ++i) {
         if(i != 0) {
             setOrbitalVel(&bodies[i], &accel[i], &bodies[0].pos);
             comVel += bodies[i].vel * bodies[i].mass;
@@ -100,7 +110,7 @@ NBodySimulation::NBodySimulation(int N_, double mass, double viewW_, double view
     cout << comPos << endl;
     Vec2 center = {viewW_/2, viewH_/2};
     // Center to avoid drift
-    for (int i = 0; i < N; ++i) {
+    for (int i = 0; i < aliveN; ++i) {
         bodies[i].pos += -comPos + center;
         bodies[i].vel += -comVel;
     }
