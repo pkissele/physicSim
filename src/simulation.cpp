@@ -5,6 +5,7 @@
 #include <cmath>
 #include <iostream>
 #include <iomanip>
+#include <algorithm>
 
 #include "utils.h"
 #include "body.h"
@@ -14,7 +15,9 @@ using namespace Consts;
 
 using namespace std;
 
-const double collisionRad = 0.1;
+const double collRad = 0.01;
+const double collMassRatio = 10;
+const bool COLLISION_FLAG = true;
 
 double gravEpsilon = 0.2;
 double gravEpsilon2 = pow(gravEpsilon, 2);
@@ -27,17 +30,39 @@ uniform_real_distribution<double> randDist(0.0, 1.0);
 using Vec2 = Eigen::Vector2d;
 
 void NBodySimulation::deleteBody(int index) {
-    // if(index != )
+    if(index != aliveN - 1) {
+        swap(bodies[index], bodies[aliveN - 1]);
+    }
+
+    aliveN += -1; //Move end pointer
 }
+
+
+void NBodySimulation::collide(int b1, int b2) {
+    Body body1 = bodies[b1];
+    Body body2 = bodies[b2];
+
+    if(body1.mass < body2.mass) {
+        swap(body1, body2);
+        swap(b1, b2);
+    }
+
+    double dist = (body1.pos - body2.pos).norm();
+
+    if((dist < collRad * (body1.size + body2.size)) && body1.mass > collMassRatio * body2.mass) {
+        body1.vel = (body1.mass * body1.vel + body2.mass * body2.vel) / (body1.mass + body2.mass);
+        body1.mass += body2.mass;
+        deleteBody(b2);
+    }
+}
+
 
 vector<Vec2> NBodySimulation::computeAccelerations(bool DO_INFO = false, double &potEnergy = *(new double)) {
     vector<Vec2> accel(N, Vec2(0.0, 0.0));
     if (DO_INFO) potEnergy = 0;
 
-    for (int i = 0; i < N; ++i) {
-        for (int j = 0; j < N; ++j) {
-            if (i == j) continue;
-
+    for (int i = 0; i < aliveN; ++i) {
+        for (int j = i+1; j < aliveN; ++j) {
             Vec2 dir = bodies[j].pos - bodies[i].pos;
             double dx = dir[0], dy = dir[1];
             double distSq = dx*dx + dy*dy;
@@ -48,8 +73,14 @@ vector<Vec2> NBodySimulation::computeAccelerations(bool DO_INFO = false, double 
             accel[i][0] += gravMag * dx * invDist;
             accel[i][1] += gravMag * dy * invDist;
 
+            accel[j] += -accel[i]/bodies[j].mass * bodies[i].mass;
+
             if (DO_INFO && i < j) {
                 potEnergy += -1 * G * bodies[j].mass * bodies[i].mass / pow(distSq + gravEpsilon2, 0.5);
+            }
+
+            if(COLLISION_FLAG) {
+                collide(i, j);
             }
         }
     }
@@ -104,6 +135,8 @@ NBodySimulation::NBodySimulation(int N_, double mass, double size, double viewW_
         }
     }
 
+    accel = computeAccelerations();
+
     comPos = comPos / totMass;
     comVel = comVel / totMass;
 
@@ -128,12 +161,12 @@ void NBodySimulation::step(double dtIn, bool DO_INFO) {
         double kinEnergy = 0, potEnergy = 0;
 
         // half-step velocity
-        for (int i = 0; i < N; ++i) {
+        for (int i = 0; i < aliveN; ++i) {
             bodies[i].vel += 0.5 * accel[i] * dt;
         }
 
         // full-step position
-        for (int i = 0; i < N; ++i) {
+        for (int i = 0; i < aliveN; ++i) {
             bodies[i].pos += bodies[i].vel * dt;
         }
 
@@ -143,7 +176,7 @@ void NBodySimulation::step(double dtIn, bool DO_INFO) {
         else accelNew = computeAccelerations();
 
         // complete velocity update
-        for (int i = 0; i < N; ++i) {
+        for (int i = 0; i < aliveN; ++i) {
             bodies[i].vel += 0.5 * accelNew[i] * dt;
 
             if (INFO_FLAG) {

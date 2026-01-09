@@ -12,6 +12,8 @@ class NBodySimulation {
 
         void deleteBody(int index);
 
+        void collide(int b1, int b2);
+
         std::vector<Vec2> computeAccelerations(bool DO_INFO, double &potEnergy);
  
         void step(double dt, bool DO_INFO);

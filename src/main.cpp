@@ -226,7 +226,7 @@ int main(int argc, char** argv) {
     bool INFO_FLAG = false;
     cout << "Starting main loop (press ESC to quit, S to toggle saving, SPACE to pause/resume, P to save single frame)" << endl;
     while (!glfwWindowShouldClose(window)) {
-        INFO_FLAG = (step%30 == 0);
+        // INFO_FLAG = (step%30 == 0);
         // Simulation stepping (we step a small number of physics steps per render to keep sim stable)
         if (!pause_sim) {
             sim.step(dt, INFO_FLAG);
@@ -235,6 +235,8 @@ int main(int argc, char** argv) {
         const auto& bodies = sim.getBodies();
 
         int aliveN = sim.getAlive();
+
+        cout << aliveN << endl;
 
         // Prepare data for GPU: convert body positions to NDC [-1,1]
         vector<float> ndc(2 * aliveN);
@@ -275,8 +277,8 @@ int main(int argc, char** argv) {
         glBindBuffer(GL_ARRAY_BUFFER, 0);
 
         // render
-        // glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-        // glClear(GL_COLOR_BUFFER_BIT);
+        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
 
         glUseProgram(bgProgram);
         glBindVertexArray(quadVAO);
@@ -293,7 +295,7 @@ int main(int argc, char** argv) {
         GLint loc_color = glGetUniformLocation(program, "color");
         glUniform3f(loc_color, 1.0f, 1.0f, 1.0f);
 
-        glDrawArrays(GL_POINTS, 0, N);
+        glDrawArrays(GL_POINTS, 0, aliveN);
 
         glBindVertexArray(0);
         glUseProgram(0);
@@ -343,7 +345,7 @@ int main(int argc, char** argv) {
         if (elapsed < FRAME_TARGET) {
             this_thread::sleep_for(chrono::milliseconds((long long)(FRAME_TARGET - elapsed)));
         } else {
-            // cout << elapsed << " ms of frametime" << endl;
+            cout << elapsed << " ms of frametime" << endl;
         }
         step += 1;
     }
