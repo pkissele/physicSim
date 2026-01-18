@@ -94,7 +94,6 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    // Request OpenGL 3.3 core
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -107,7 +106,6 @@ int main(int argc, char** argv) {
     }
     glfwMakeContextCurrent(window);
 
-    // Load GL functions using GLAD
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         cerr << "Failed to initialize GLAD\n";
         return -1;
@@ -143,7 +141,7 @@ int main(int argc, char** argv) {
 
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    // dynamic buffer large enough for N points (2 floats each)
+
     glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 2 * N, NULL, GL_DYNAMIC_DRAW);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
@@ -171,7 +169,6 @@ int main(int argc, char** argv) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    // input state via lambda callbacks
     glfwSetWindowUserPointer(window, &save_frames);
     glfwSetKeyCallback(window, [](GLFWwindow* w, int key, int sc, int action, int mods){
         if (action == GLFW_PRESS) {
@@ -187,14 +184,12 @@ int main(int argc, char** argv) {
         }
     });
 
-
-    // Make output folder if saving
     string outdir = "outputFrames";
     if (!filesystem::exists(outdir)) {
         filesystem::create_directory(outdir);
     }
-    const int FPS_TARGET = 60;
 
+    const int FPS_TARGET = 60;
     double t = 0.0;
     // double dt = 1e-2; 
     double dt = (double)1/FPS_TARGET;
@@ -214,20 +209,17 @@ int main(int argc, char** argv) {
         }
     }
 
-    // render loop variables
     double sim_time = 0.0;
     int frame_idx = 0;
     const float point_screen_size = 6.0f;
 
-    // main loop
     double lastTime = glfwGetTime();
     int step = 0;
 
     bool INFO_FLAG = false;
     cout << "Starting main loop (press ESC to quit, S to toggle saving, SPACE to pause/resume, P to save single frame)" << endl;
     while (!glfwWindowShouldClose(window)) {
-        // INFO_FLAG = (step%30 == 0);
-        // Simulation stepping (we step a small number of physics steps per render to keep sim stable)
+        INFO_FLAG = (step%30 == 0);
         if (!pause_sim) {
             sim.step(dt, INFO_FLAG);
         }
@@ -236,9 +228,9 @@ int main(int argc, char** argv) {
 
         int aliveN = sim.getAlive();
 
-        cout << aliveN << endl;
+        // cout << aliveN << endl;
 
-        // Prepare data for GPU: convert body positions to NDC [-1,1]
+        // Convert body positions to NDC [-1,1] for GPU
         vector<float> ndc(2 * aliveN);
         for (int i = 0; i < aliveN; ++i) {
             float nx = (float)(((bodies[i].pos[0] + 0.5*(displayW-viewW)) / displayW) * 2.0 - 1.0);
@@ -345,7 +337,7 @@ int main(int argc, char** argv) {
         if (elapsed < FRAME_TARGET) {
             this_thread::sleep_for(chrono::milliseconds((long long)(FRAME_TARGET - elapsed)));
         } else {
-            cout << elapsed << " ms of frametime" << endl;
+            // cout << elapsed << " ms of frametime" << endl;
         }
         step += 1;
     }

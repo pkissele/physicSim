@@ -10,11 +10,13 @@ class NBodySimulation {
     public:
         NBodySimulation(int N, double mass, double size, double viewW, double viewH);
 
-        void deleteBody(int index);
-
         void collide(int b1, int b2);
 
-        std::vector<Vec2> computeAccelerations(bool DO_INFO, double &potEnergy);
+        void deleteMarkedBodies();
+
+        void doCollisions();
+
+        std::vector<Vec2> computeAccelerations(bool DO_INFO, double* potEnergy);
  
         void step(double dt, bool DO_INFO);
         const std::vector<Body>& getBodies() const { return bodies; }
@@ -26,5 +28,6 @@ class NBodySimulation {
 
     private:
         std::vector<Body> bodies;
+        std::vector<int> markDelete;
         std::vector<Vec2> accel;
 };
