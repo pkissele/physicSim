@@ -27,8 +27,13 @@ using Vec2 = Eigen::Vector2d;
 const double viewW = 20.0;
 const double viewH = 20.0;
 
+// Current display scaling
 double displayW = viewW;
 double displayH = viewH;
+
+// Current display shift
+double displayX = 0;
+double displayY = 0;
 
 // window size
 const int screenW = 900;
@@ -175,11 +180,9 @@ int main(int argc, char** argv) {
             bool* save_ptr = (bool*)glfwGetWindowUserPointer(w);
             if (key == GLFW_KEY_ESCAPE) {
                 glfwSetWindowShouldClose(w, GLFW_TRUE);
-            } else if (key == GLFW_KEY_S) {
+            } else if (key == GLFW_KEY_J) {
                 *save_ptr = !(*save_ptr);
                 cout << "Toggle continuous saving: " << (*save_ptr ? "ON" : "OFF") << endl;
-            } else if (key == GLFW_KEY_SPACE) {
-            } else if (key == GLFW_KEY_P) {
             }
         }
     });
@@ -310,7 +313,7 @@ int main(int argc, char** argv) {
             this_thread::sleep_for(chrono::milliseconds(150));
             cout << "Pause: " << (pause_sim ? "ON" : "OFF") << endl;
         }
-        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+        if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) {
             save_frames = !save_frames;
             this_thread::sleep_for(chrono::milliseconds(150));
             cout << "Continuous save: " << (save_frames ? "ON" : "OFF") << endl;
@@ -329,7 +332,19 @@ int main(int argc, char** argv) {
             displayW *= 1.5;
             displayH *= 1.5;
         }
- 
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+            cout << "w pressed" << endl;
+        }
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+            cout << "a pressed" << endl;
+        }
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+            cout << "s pressed" << endl;
+        }
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+            cout << "d pressed" << endl;
+        }
+
         double now = glfwGetTime();
         double elapsed = (now - lastTime) * 1000.0;
         lastTime = now;

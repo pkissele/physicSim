@@ -144,8 +144,8 @@ NBodySimulation::NBodySimulation(int N_, double mass, double size, double viewW_
         }
     }
 
-    bodies[1].mass = 10;
-    bodies[1].size = 5 * size;
+    // bodies[1].mass = 10;
+    // bodies[1].size = 5 * size;
 
     accel = computeAccelerations();
 
