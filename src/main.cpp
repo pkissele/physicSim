@@ -83,7 +83,7 @@ GLuint create_program(const string& vs_path, const string& fs_path) {
 
 int main(int argc, char** argv) {
     // Simulation parameters
-    const int N = 5000;
+    const int N = 3000;
     const double mass = 0.0005;
     const double size = 6;
 
