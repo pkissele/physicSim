@@ -17,7 +17,8 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
-#include "simulation.h"
+// #include "simulation.h"
+#include "tree.h"
 #include "utils.h"
 
 using namespace std;
@@ -83,9 +84,10 @@ GLuint create_program(const string& vs_path, const string& fs_path) {
 
 int main(int argc, char** argv) {
     // Simulation parameters
-    const int N = 3000;
-    const double mass = 0.0005;
-    const double size = 6;
+    const int N = 20000;
+    // const double mass = 0.0005;
+    const double mass = 0.00005;
+    const double size = 3;
 
     // runtime options
     bool save_frames = false;
@@ -198,7 +200,7 @@ int main(int argc, char** argv) {
     double dt = (double)1/FPS_TARGET;
     const double FRAME_TARGET = 1000/FPS_TARGET;
 
-    NBodySimulation sim(N, mass, size, viewW, viewH);
+    quadTreeSim sim(N, mass, size, viewW, viewH);
 
     // parse optional args
     for (int i=1;i<argc;i++){
@@ -222,7 +224,7 @@ int main(int argc, char** argv) {
     bool INFO_FLAG = false;
     cout << "Starting main loop (press ESC to quit, S to toggle saving, SPACE to pause/resume, P to save single frame)" << endl;
     while (!glfwWindowShouldClose(window)) {
-        INFO_FLAG = (step%30 == 0);
+        // INFO_FLAG = (step%30 == 0);
         if (!pause_sim) {
             sim.step(dt, INFO_FLAG);
         }
@@ -352,7 +354,7 @@ int main(int argc, char** argv) {
         if (elapsed < FRAME_TARGET) {
             this_thread::sleep_for(chrono::milliseconds((long long)(FRAME_TARGET - elapsed)));
         } else {
-            // cout << elapsed << " ms of frametime" << endl;
+            cout << elapsed << " ms of frametime" << endl;
         }
         step += 1;
     }

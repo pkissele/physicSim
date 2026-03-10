@@ -33,6 +33,11 @@ void randDisk(Body* b, double maxRad, double centMass, double pMass, int N) {
     b->pos = pos;
 }
 
+void randVels(Body* b, double maxRad) {
+    Vec2 nVel(dist01(rngBody) * maxRad, dist01(rngBody) * maxRad);
+    b->vel = nVel;
+}
+
 void setOrbitalVel(Body* b, Vec2* acc, Vec2* centPos) {
     Vec2 r = b->pos - *centPos;
     double radAccel = (*acc).dot(r.normalized());
