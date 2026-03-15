@@ -11,9 +11,9 @@
 #include <GLFW/glfw3.h>
 
 #include "body.h"
-#include "consts.h"
+// #include "consts.h"
 
-using namespace Consts;
+// using namespace Consts;
 
 using namespace std;
 

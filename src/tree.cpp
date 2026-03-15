@@ -4,9 +4,9 @@
 #include <vector>
 #include <cmath>
 #include <iostream>
-#include <iomanip>
+// #include <iomanip>
 #include <algorithm>
-#include <functional>
+// #include <functional>
 
 #include "utils.h"
 #include "body.h"
@@ -38,9 +38,7 @@ quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double
 
     aliveN = N;
 
-    // tree.resize(aliveN * 8);
     nodeCnt = 0;
-
 
     markDelete.reserve(aliveN);
 
@@ -150,8 +148,8 @@ void quadTreeSim::step(double dtIn, bool DO_INFO) {
 }
 
 void quadTreeSim::buildTree() {
-    Vec2 minCorner = {0, 0};
-    Vec2 maxCorner = {0, 0};
+    Vec2 minCorner = {100000, 100000};
+    Vec2 maxCorner = {-100000, -100000};
 
     tree.assign(aliveN * 8, Node());
     nodeCnt = 0;

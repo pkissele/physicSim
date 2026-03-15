@@ -8,6 +8,7 @@ layout(location = 2) in float in_size;
 // uniform float pointSize;
 
 out float vSpeed;
+out float vSize;
 
 void main() {
     // positions are passed in NDC coordinates already (x,y in [-1,1])
@@ -16,4 +17,5 @@ void main() {
     // gl_PointSize = pointSize;
 
     vSpeed = length(in_vel);
+    vSize = in_size;
 }

@@ -1,10 +1,10 @@
 #include <iostream>
 #include <vector>
 #include <string>
-#include <cmath>
-#include <random>
+// #include <cmath>
+// #include <random>
 #include <sstream>
-#include <fstream>
+// #include <fstream>
 #include <iomanip>
 #include <filesystem>
 
@@ -37,8 +37,11 @@ double displayX = 0;
 double displayY = 0;
 
 // window size
-const int screenW = 900;
-const int screenH = 900;
+const int screenW = 1500;
+const int screenH = 1500;
+
+const bool LOG_TIME = false;
+const bool LOG_ENERGY = true;
 
 // helper: compile shader and link program
 GLuint compile_shader(GLenum type, const char* src) {
@@ -84,10 +87,15 @@ GLuint create_program(const string& vs_path, const string& fs_path) {
 
 int main(int argc, char** argv) {
     // Simulation parameters
-    const int N = 20000;
-    // const double mass = 0.0005;
+    // const int N = 20000;
+    const int N = 200000;
+    // const double mass = 0.00005;
     const double mass = 0.00005;
-    const double size = 3;
+    const double size = 5;
+
+    const bool LOG_TIME = true;
+    const bool LOG_ENERGY = false;
+
 
     // runtime options
     bool save_frames = false;
@@ -198,8 +206,8 @@ int main(int argc, char** argv) {
     double t = 0.0;
     // double dt = 1e-2; 
     double dt = (double)1/FPS_TARGET;
-    const double FRAME_TARGET = 1000/FPS_TARGET;
-
+    const double FRAME_TARGET = 1000.0/FPS_TARGET;
+ 
     quadTreeSim sim(N, mass, size, viewW, viewH);
 
     // parse optional args
@@ -224,7 +232,7 @@ int main(int argc, char** argv) {
     bool INFO_FLAG = false;
     cout << "Starting main loop (press ESC to quit, S to toggle saving, SPACE to pause/resume, P to save single frame)" << endl;
     while (!glfwWindowShouldClose(window)) {
-        // INFO_FLAG = (step%30 == 0);
+        if(LOG_ENERGY) INFO_FLAG = (step%30 == 0);
         if (!pause_sim) {
             sim.step(dt, INFO_FLAG);
         }
@@ -354,7 +362,9 @@ int main(int argc, char** argv) {
         if (elapsed < FRAME_TARGET) {
             this_thread::sleep_for(chrono::milliseconds((long long)(FRAME_TARGET - elapsed)));
         } else {
-            cout << elapsed << " ms of frametime" << endl;
+            if(LOG_TIME) {
+                cout << elapsed << " ms of frametime" << endl;
+            }
         }
         step += 1;
     }

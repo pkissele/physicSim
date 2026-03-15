@@ -59,7 +59,10 @@ target_link_libraries(runSim
     PNG::PNG
 )
 
-# -----------------------------sud--
+# -------------------------------
 # Optimization flags
 # -------------------------------
 target_compile_options(runSim PRIVATE -O3)
+
+# Export
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

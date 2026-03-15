@@ -1,6 +1,7 @@
 #version 330 core
 
 in float vSpeed;
+in float vSize;
 out vec4 fragColor;
 
 void main() {
@@ -22,5 +23,9 @@ void main() {
         color = mix(vec3(1.0,1.0,0.0), vec3(1.0,0.0,0.0), tt);
     }
 
-    fragColor = vec4(color, 1.0);
+    if(vSize > 5) {
+        fragColor = vec4(color, 1);
+    } else {
+        fragColor = vec4(color, 0.2);
+    }
 }
