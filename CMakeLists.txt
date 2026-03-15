@@ -25,9 +25,9 @@ find_package(glfw3 REQUIRED)
 # -------------------------------
 add_executable(runSim
     src/main.cpp
-    # src/simulation.cpp
-    src/utils.cpp
     src/tree.cpp
+    src/utils.cpp
+    src/gl_utils.cpp
 )
 
 # -------------------------------

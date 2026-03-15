@@ -11,7 +11,3 @@ void randDisk(Body* b, double maxRad, double centMass, double pMass, int N);
 void randVels(Body* b, double maxRad);
 
 void setOrbitalVel(Body* b, Vec2* acc, Vec2* centPos);
-
-std::string load_file(const std::string& path);
-
-void save_framebuffer_png(const std::string& filename, int width, int height);

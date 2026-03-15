@@ -99,7 +99,6 @@ quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double
     comPos = comPos / totMass;
     comVel = comVel / totMass;
 
-    cout << comPos << endl;
     Vec2 center = {viewW_/2, viewH_/2};
 
     // Center to avoid drift
@@ -251,7 +250,7 @@ Vec2 quadTreeSim::computeAccel(int bInd, int nInd, double* potEnergy = nullptr) 
     Vec2 r = tree[nInd].com - bodies[bInd].pos;
     double d = r.norm();
     double s = tree[nInd].halfSize * 2;
-    
+
     if(tree[nInd].bIndex != -1 || (s/d) < theta) {
         double distSq = pow(d, 2) + gravEpsilon2;
         *potEnergy += -(double)1/2 * G * tree[nInd].mass * bodies[bInd].mass / sqrt(distSq);
