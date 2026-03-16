@@ -5,9 +5,17 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE Release)
 
-# -------------------------------
+
+# Profiling
+option(PROFILE "Enable profiling flags" OFF)
+if(PROFILE)
+    message(STATUS "Profiling enabled")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pg")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pg")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pg")
+endif()
+
 # Dependencies
-# -------------------------------
 add_library(glad STATIC external/glad/src/glad.c)
 
 find_package(PkgConfig REQUIRED)
@@ -20,9 +28,7 @@ find_package(PNG REQUIRED)
 # GLFW
 find_package(glfw3 REQUIRED)
 
-# -------------------------------
 # Executable
-# -------------------------------
 add_executable(runSim
     src/main.cpp
     src/tree.cpp
@@ -30,9 +36,7 @@ add_executable(runSim
     src/gl_utils.cpp
 )
 
-# -------------------------------
 # Linking
-# -------------------------------
 target_include_directories(runSim PRIVATE
     ${GLEW_INCLUDE_DIRS}
     ${CAIRO_INCLUDE_DIRS}
@@ -50,18 +54,14 @@ target_link_libraries(runSim
     OpenMP::OpenMP_CXX
     Eigen3::Eigen
 
-    # OpenGL essentials
     OpenGL::GL
     glfw
     glad
 
-    #PNG writing
     PNG::PNG
 )
 
-# -------------------------------
 # Optimization flags
-# -------------------------------
 target_compile_options(runSim PRIVATE -O3)
 
 # Export

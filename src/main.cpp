@@ -106,6 +106,14 @@ int main(int argc, char** argv) {
     int step = 0;
     bool INFO_FLAG = false;
 
+    // instantiate NDC
+    vector<float> posNDC(2 * N);
+    vector<float> velNDC(2 * N);
+    vector<float> sizeNDC(N);
+
+    // get uniform
+    GLint colorLoc = glGetUniformLocation(program, "color");
+
     cout << "Starting main loop (press ESC to quit, S to toggle saving, SPACE to pause/resume, P to save single frame)" << endl;
     while (!glfwWindowShouldClose(window)) {
         // stagger logging
@@ -118,20 +126,17 @@ int main(int argc, char** argv) {
         const auto& bodies = sim.getBodies();
         int aliveN = sim.getAlive();
 
-        // convert body positions to NDC [-1,1] for GPU
-        vector<float> posNDC(2 * aliveN);
-        vector<float> velNDC(2 * aliveN);
-        vector<float> sizeNDC(aliveN);
+        // resive for new particle count
+        posNDC.resize(2 * aliveN);
+        velNDC.resize(2 * aliveN);
+        sizeNDC.resize(aliveN);
 
+        // convert body positions to NDC [-1,1] for GPU
         for (int i = 0; i < aliveN; ++i) {
             posNDC[2*i+0] = (float)(((bodies[i].pos[0] + 0.5*(displayW-viewW)) / displayW) * 2.0 - 1.0);
             posNDC[2*i+1] = (float)(((bodies[i].pos[1] + 0.5*(displayH-viewH)) / displayH) * 2.0 - 1.0);
-        }
-        for (int i = 0; i < aliveN; ++i) {
             velNDC[2*i+0] = (float)(bodies[i].vel[0]);
             velNDC[2*i+1] = (float)(bodies[i].vel[1]);
-        }
-        for (int i = 0; i < aliveN; ++i) {
             sizeNDC[i] = (float)(bodies[i].size * (viewH/displayH));
         }
 
@@ -148,8 +153,7 @@ int main(int argc, char** argv) {
 
         // Draw bodies
         glUseProgram(program);
-        GLint loc = glGetUniformLocation(program, "color");
-        glUniform3f(loc, 1.0f, 1.0f, 1.0f);
+        glUniform3f(colorLoc, 1.0f, 1.0f, 1.0f);
         drawVAO(program, vao, GL_POINTS, aliveN);
 
         // Put to screen
@@ -185,7 +189,6 @@ int main(int argc, char** argv) {
     glDeleteProgram(program);
     glfwDestroyWindow(window);
     glfwTerminate();
-    cout << "Program terminated.\n";
     return 0;
 }
 

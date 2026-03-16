@@ -58,7 +58,7 @@ GLuint attachVBO(int attribIndex, int components, int count) {
     GLuint vbo;
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * components * count, NULL, GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * components * count, NULL, GL_STREAM_DRAW);
     glEnableVertexAttribArray((GLuint)attribIndex);
     glVertexAttribPointer((GLuint)attribIndex, components, GL_FLOAT, GL_FALSE, components * sizeof(float), (void*)0);
     return vbo;
