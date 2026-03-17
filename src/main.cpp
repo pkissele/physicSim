@@ -6,6 +6,8 @@
 #include <sstream>
 #include <iomanip>
 #include <filesystem>
+#include <thread>
+#include <atomic>
 
 #include <png.h>
 #include <Eigen/Dense>
@@ -78,16 +80,20 @@ int main(int argc, char** argv) {
     bool save_single_frame = false;
     int save_counter = 0;
 
+
+    // Simulation/window state
+    globalState state{pause_sim, save_frames, save_single_frame, displayW, displayH, window};
+    state.buffers[0].resize(N);
+    state.buffers[1].resize(N);
+
+
     // parse optional args
-    for (int i=1;i<argc;i++){
-        string arg(argv[i]);
-        if (arg == "--save") save_frames = true;
-    }
+    for (int i=1;i<argc;i++) if ((string)argv[i] == "--save") save_frames = true;
+
     string outdir = "outputFrames";
     if (!filesystem::exists(outdir)) filesystem::create_directory(outdir);
 
     // define keybinds
-    AppState state{pause_sim, save_frames, save_single_frame, displayW, displayH, window};
     glfwSetWindowUserPointer(window, &state);
     glfwSetKeyCallback(window, keyCallback);
 
@@ -195,7 +201,7 @@ int main(int argc, char** argv) {
 
 void keyCallback(GLFWwindow* w, int key, int sc, int action, int mods) {
     if (action != GLFW_PRESS) return;
-    auto* s = (AppState*)glfwGetWindowUserPointer(w);
+    auto* s = (globalState*)glfwGetWindowUserPointer(w);
     switch (key) {
         case GLFW_KEY_ESCAPE: glfwSetWindowShouldClose(w, GLFW_TRUE); break;
         case GLFW_KEY_SPACE:  s->pause_sim = !s->pause_sim; break;
