@@ -2,7 +2,6 @@
 
 #include <chrono>
 #include <iostream>
-#include <ratio>
 #include <vector>
 #include <string>
 #include <sstream>
@@ -42,7 +41,7 @@ const int screenW = 1500;
 const int screenH = 1500;
 
 // basic logging
-const bool LOG_GUI_TIME = false;
+const bool LOG_GUI_TIME = false; 
 const bool LOG_SIM_TIME = true;
 const bool LOG_ENERGY = false;
 
@@ -82,7 +81,7 @@ int main(int argc, char** argv) {
     bool save_single_frame = false;
 
     // Simulation/window state
-    globalState state{save_frames, save_single_frame, displayW, displayH, window};
+    globalState state{save_frames, save_single_frame, displayW, displayH, displayX, displayY, window};
 
 
     // parse optional args
@@ -125,11 +124,14 @@ int main(int argc, char** argv) {
     vector<float> sizeNDC(N);
 
     // get uniform
-    GLint colorLoc = glGetUniformLocation(program, "color");
+    GLint colorLoc =            glGetUniformLocation(program, "color");
+    GLint displaySizeLoc =      glGetUniformLocation(program, "displaySize");
+    GLint displayOffsetLoc =    glGetUniformLocation(program, "displayOffset");
     int aliveN = N;
     const vector<Body>* bodies = &state.buffers[0];
 
     cout << "Starting main loop (press ESC to quit, S to toggle saving, SPACE to pause/resume, P to save single frame)" << endl;
+    int displayFrame = 1;
     while (!glfwWindowShouldClose(window)) {
         // reuse data if nothing new
         if (state.newFrame.exchange(false)) {
@@ -146,14 +148,14 @@ int main(int argc, char** argv) {
             sizeNDC.resize(1 * aliveN);
         }
 
-        // convert body positions to NDC [-1,1] for GPU
+        // flatten data into NDC (casting to [-1, 1] done in shader)
         const auto& b = *bodies;
         for (int i = 0; i < aliveN; ++i) {
-            posNDC[2*i+0] = (float)(((b[i].pos[0] + 0.5*(displayW-viewW)) / displayW) * 2.0 - 1.0);
-            posNDC[2*i+1] = (float)(((b[i].pos[1] + 0.5*(displayH-viewH)) / displayH) * 2.0 - 1.0);
+            posNDC[2*i+0] = (float)b[i].pos[0];
+            posNDC[2*i+1] = (float)b[i].pos[1];
             velNDC[2*i+0] = (float)b[i].vel[0];
             velNDC[2*i+1] = (float)b[i].vel[1];
-            sizeNDC[i]    = (float)(b[i].size * (viewH / displayH));
+            sizeNDC[i]    = (float)b[i].size;
         }
 
         uploadBuffer(posVBO,  posNDC.data(),  sizeof(float) * 2 * aliveN);
@@ -168,6 +170,9 @@ int main(int argc, char** argv) {
         // Draw bodies
         glUseProgram(program);
         glUniform3f(colorLoc, 1.0f, 1.0f, 1.0f);
+        glUniform2f(displaySizeLoc, (float)displayW, (float)displayH);
+        glUniform2f(displayOffsetLoc, (float)(displayX - 0.5f * (displayW - viewW)), (float)(displayY - 0.5f * (displayH - viewH)));
+ 
         drawVAO(program, vao, GL_POINTS, aliveN);
 
         // Put to screen
@@ -192,8 +197,9 @@ int main(int argc, char** argv) {
         double elapsed = (now - lastTime) * 1000.0;
         lastTime = now;
 
-        if (LOG_GUI_TIME) cout << fixed << setprecision(2) << elapsed << " ms of frametime" << endl;
+        if (LOG_GUI_TIME && displayFrame%30 == 0) cout << fixed << setprecision(2) << elapsed << " ms of frametime" << endl;
         if (elapsed < FRAME_TARGET) this_thread::sleep_for(chrono::milliseconds((long long)(FRAME_TARGET - elapsed)));
+        displayFrame += 1;
     }
 
     running = false;
@@ -252,13 +258,21 @@ void keyCallback(GLFWwindow* w, int key, int sc, int action, int mods) {
     if (action != GLFW_PRESS) return;
     auto* s = (globalState*)glfwGetWindowUserPointer(w);
     switch (key) {
-        case GLFW_KEY_ESCAPE: glfwSetWindowShouldClose(w, GLFW_TRUE); break;
-        case GLFW_KEY_Q:      glfwSetWindowShouldClose(w, GLFW_TRUE); break;
-        case GLFW_KEY_SPACE:  s->paused = !s->paused.load(); break;
-        case GLFW_KEY_J:      s->save_frames = !s->save_frames; break;
-        case GLFW_KEY_P:      s->save_single_frame = true; break;
-        case GLFW_KEY_UP:     s->displayW *= 0.66; s->displayH *= 0.66; break;
-        case GLFW_KEY_DOWN:   s->displayW *= 1.5;  s->displayH *= 1.5;  break;
+        case GLFW_KEY_ESCAPE:   glfwSetWindowShouldClose(w, GLFW_TRUE); break;
+        case GLFW_KEY_Q:        glfwSetWindowShouldClose(w, GLFW_TRUE); break;
+
+        case GLFW_KEY_SPACE:    s->paused = !s->paused.load(); break;
+
+        case GLFW_KEY_J:        s->save_frames = !s->save_frames; break;
+        case GLFW_KEY_P:        s->save_single_frame = true; break;
+
+        case GLFW_KEY_UP:       s->displayW *= 0.66; s->displayH *= 0.66; break;
+        case GLFW_KEY_DOWN:     s->displayW *= 1.5;  s->displayH *= 1.5;  break;
+
+        case GLFW_KEY_W:        s->displayY += 0.1 * s->displayH; break;
+        case GLFW_KEY_A:        s->displayX += -0.1 * s->displayW; break;
+        case GLFW_KEY_S:        s->displayY += -0.1 * s->displayH; break;
+        case GLFW_KEY_D:        s->displayX += 0.1 * s->displayW; break;
     }
     cout << keyName(key) << " pressed" << endl;
 }

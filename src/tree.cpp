@@ -4,9 +4,7 @@
 #include <vector>
 #include <cmath>
 #include <iostream>
-// #include <iomanip>
 #include <algorithm>
-// #include <functional>
 
 #include "utils.h"
 #include "body.h"
@@ -16,6 +14,11 @@
 using namespace Consts;
 
 using namespace std;
+
+
+// Fast square
+template<typename T> inline constexpr T sq(T x) { return x * x; }
+
 
 const double collRad = 0.01;
 const double collMassRatio = 10;
@@ -37,10 +40,13 @@ quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double
     : N(N_), viewW(viewW_), viewH(viewH_) {
 
     aliveN = N;
-
     nodeCnt = 0;
 
     markDelete.reserve(aliveN);
+
+    accel.resize(aliveN, Vec2(0.0, 0.0));
+    accelNew.resize(aliveN, Vec2(0.0, 0.0));
+    tree.resize(aliveN * 8);
 
     bodies.resize(aliveN);
     for(int i = 0; i < aliveN; ++i) {
@@ -56,52 +62,34 @@ quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double
     Vec2 comVel = {0, 0};
     double totMass = 0;
 
-    double initVelScale = 1;
-    double diskScale = 1;
-
     double screenFracScale = 2.5;
-
-    diskScale = min(viewW, viewH)/screenFracScale;
+    double diskScale = min(viewW, viewH)/screenFracScale;;
 
     for (int i = 0; i < aliveN; ++i) {
         if(i != 0) {
             randDisk(&bodies[i], diskScale, bodies[0].mass, mass, N);
         }
-        bodies[i].vel *= initVelScale;
         comPos += bodies[i].pos * bodies[i].mass;
         totMass += bodies[i].mass;
     }
 
+    // Initialize into stable orbit
     buildTree();
-    accel.resize(aliveN, Vec2(0.0, 0.0));
-    double potEnergy;
     for(int i = 0; i < aliveN; ++i) {
-        accel[i] = computeAccel(i, 0, &potEnergy);
+        accel[i] = computeAccel(i, 0, false, nullptr);
     }
-
-    // for (int i = 0; i < aliveN; ++i) {
-    //     randVels(&bodies[i], diskScale/4);
-    //     comVel += bodies[i].vel * bodies[i].mass;
-    // }
-
     for (int i = 0; i < aliveN; ++i) {
         if(i != 0) {
             setOrbitalVel(&bodies[i], &accel[i], &bodies[0].pos);
+            //     randVels(&bodies[i], diskScale/4);
             comVel += bodies[i].vel * bodies[i].mass;
         }
     }
 
-    buildTree();
-    for(int i = 0; i < aliveN; ++i) {
-        accel[i] = computeAccel(i, 0, &potEnergy);
-    }
-
+    // Center to avoid drift
     comPos = comPos / totMass;
     comVel = comVel / totMass;
-
     Vec2 center = {viewW_/2, viewH_/2};
-
-    // Center to avoid drift
     for (int i = 0; i < aliveN; ++i) {
         bodies[i].pos += -comPos + center;
         bodies[i].vel += -comVel;
@@ -124,16 +112,15 @@ void quadTreeSim::step(double dtIn, bool DO_INFO) {
 
         // recompute acceleration
         buildTree();
-        vector<Vec2> accelNew(aliveN, Vec2(0.0, 0.0));;
         for (int i = 0; i < aliveN; ++i) {
-            accelNew[i] = computeAccel(i, 0, &potEnergy);
+            accelNew[i] = computeAccel(i, 0, DO_INFO, &potEnergy);
         }
 
         // half-step velocity (kick)
         for (int i = 0; i < aliveN; ++i) {
             bodies[i].vel += 0.5 * accelNew[i]*dt;
             if (INFO_FLAG) {
-                kinEnergy += 0.5 * bodies[i].mass * (pow(bodies[i].vel[0], 2) + pow(bodies[i].vel[1], 2));
+                kinEnergy += 0.5 * bodies[i].mass * (bodies[i].vel.squaredNorm());
             }
         }
 
@@ -244,7 +231,7 @@ void quadTreeSim::computeMassDistribution(int nInd) {
     }
 }
 
-Vec2 quadTreeSim::computeAccel(int bInd, int nInd, double* potEnergy = nullptr) {
+Vec2 quadTreeSim::computeAccel(int bInd, int nInd, bool DO_INFO, double* potEnergy = nullptr) {
     if(bInd == tree[nInd].bIndex) return Vec2(0.0, 0.0);
 
     Vec2 r = tree[nInd].com - bodies[bInd].pos;
@@ -252,9 +239,10 @@ Vec2 quadTreeSim::computeAccel(int bInd, int nInd, double* potEnergy = nullptr) 
     double s = tree[nInd].halfSize * 2;
 
     if(tree[nInd].bIndex != -1 || (s/d) < theta) {
-        double distSq = pow(d, 2) + gravEpsilon2;
-        *potEnergy += -(double)1/2 * G * tree[nInd].mass * bodies[bInd].mass / sqrt(distSq);
-        return G * tree[nInd].mass * r / (distSq*sqrt(distSq));
+        double distSq = sq(d) + gravEpsilon2;
+        double dist = sqrt(distSq);
+        if (DO_INFO) *potEnergy += -(double)1/2 * G * tree[nInd].mass * bodies[bInd].mass / dist;
+        return G * tree[nInd].mass * r / (distSq*dist);
     } else {
         Vec2 totAccel = {0.0, 0.0};
 

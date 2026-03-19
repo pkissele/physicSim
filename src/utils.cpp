@@ -18,8 +18,21 @@ using namespace std;
 
 using Vec2 = Eigen::Vector2d;
 
+
 mt19937_64 rngBody(random_device{}());
 uniform_real_distribution<double> dist01(0.0, 1.0);
+
+// Morton ordering for quadtree cache locality
+auto morton(Vec2 pos, Vec2 min, Vec2 max) -> uint32_t {
+    uint64_t x = (uint64_t)((pos[0] - min[0]) / (max[0] - min[0]) * 0xFFFFFFFF);
+    uint64_t y = (uint64_t)((pos[1] - min[1]) / (max[1] - min[1]) * 0xFFFFFFFF);
+    uint64_t code = 0;
+    for (int i = 0; i < 32; i++) {
+        code |= ((x >> i) & 1) << (2*i);
+        code |= ((y >> i) & 1) << (2*i + 1);
+    }
+    return code;
+};
 
 void randDisk(Body* b, double maxRad, double centMass, double pMass, int N) {
     double theta = dist01(rngBody) * 2.0 * M_PI;

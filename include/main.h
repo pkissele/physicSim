@@ -19,6 +19,8 @@ struct globalState {
     bool& save_single_frame;
     double& displayW;
     double& displayH;
+    double& displayX;
+    double& displayY;
     GLFWwindow* window;
 
     // GUI-sim thread sharing

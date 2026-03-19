@@ -19,16 +19,8 @@ class quadTreeSim {
 
         void computeMassDistribution(int nInd);
 
-        Vec2 computeAccel(int bInd, int nInd, double* potEnergy);
+        Vec2 computeAccel(int bInd, int nInd, bool DO_INFO, double* potEnergy);
 
-        void collide(int b1, int b2);
-
-        void deleteMarkedBodies();
-
-        void doCollisions();
-
-        std::vector<Vec2> computeAccelerations(bool DO_INFO, double* potEnergy);
- 
         void step(double dt, bool DO_INFO);
 
         const std::vector<Body>& getBodies() const { return bodies; }
@@ -44,5 +36,6 @@ class quadTreeSim {
         std::vector<Body> bodies;
         std::vector<int> markDelete;
         std::vector<Vec2> accel;
+        std::vector<Vec2> accelNew;
         std::vector<Node> tree;
 };
