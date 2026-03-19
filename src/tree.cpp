@@ -76,7 +76,7 @@ quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double
     // Initialize into stable orbit
     buildTree();
     for(int i = 0; i < aliveN; ++i) {
-        accel[i] = computeAccel(i, 0, false, nullptr);
+        accel[i] = computeAccel(i, false, nullptr);
     }
     for (int i = 0; i < aliveN; ++i) {
         if(i != 0) {
@@ -113,7 +113,7 @@ void quadTreeSim::step(double dtIn, bool DO_INFO) {
         // recompute acceleration
         buildTree();
         for (int i = 0; i < aliveN; ++i) {
-            accelNew[i] = computeAccel(i, 0, DO_INFO, &potEnergy);
+            accelNew[i] = computeAccel(i, DO_INFO, &potEnergy);
         }
 
         // half-step velocity (kick)
@@ -165,7 +165,7 @@ void quadTreeSim::buildTree() {
         insertParticle(0, i);
     }
 
-    computeMassDistribution(0);
+    computeMassDistribution();
 }
 
 void quadTreeSim::insertParticle(int nInd, int bInd) {
@@ -208,7 +208,87 @@ void quadTreeSim::subdivide(int nInd) {
     }
 }
 
-void quadTreeSim::computeMassDistribution(int nInd) {
+
+void quadTreeSim::computeMassDistribution() {
+    static vector<int> stack;
+    static vector<int> order;
+    stack.clear();
+    order.clear();
+
+    // record traversal order
+    stack.push_back(0);
+    while (!stack.empty()) {
+        int nInd = stack.back();
+        stack.pop_back();
+        order.push_back(nInd);
+        for (int i = 0; i < 4; i++) {
+            if (tree[nInd].children[i] != -1) {
+                stack.push_back(tree[nInd].children[i]);
+            }
+        }
+    }
+
+    // process leaves first
+    for (int i = order.size() - 1; i >= 0; i--) {
+        int nInd = order[i];
+        if (tree[nInd].bIndex != -1) {
+            tree[nInd].mass = bodies[tree[nInd].bIndex].mass;
+            tree[nInd].com = bodies[tree[nInd].bIndex].pos;
+        } else {
+            double totMass = 0;
+            Vec2 weightSum = {0.0, 0.0};
+            for (int c = 0; c < 4; c++) {
+                int child = tree[nInd].children[c];
+                if (child != -1) {
+                    totMass += tree[child].mass;
+                    weightSum += tree[child].com * tree[child].mass;
+                }
+            }
+
+            tree[nInd].mass = totMass;
+            tree[nInd].com  = totMass != 0 ? weightSum / totMass : Vec2(0, 0);
+        }
+    }
+}
+
+
+Vec2 quadTreeSim::computeAccel(int bInd, bool DO_INFO, double* potEnergy) {
+    Vec2 totAccel = {0.0, 0.0};
+
+    static vector<int> stack;
+    stack.clear();
+    stack.push_back(0);
+
+    while (!stack.empty()) {
+        int nInd = stack.back();
+        stack.pop_back();
+
+        if (bInd == tree[nInd].bIndex) continue;
+
+        Vec2 r = tree[nInd].com - bodies[bInd].pos;
+        double d = r.norm();
+        double s = tree[nInd].halfSize * 2;
+
+        if (tree[nInd].bIndex != -1 || (s/d) < theta) {
+            double distSq = sq(d) + gravEpsilon2;
+            double dist = sqrt(distSq);
+
+            if (DO_INFO && potEnergy) *potEnergy += -0.5 * G * tree[nInd].mass * bodies[bInd].mass / dist;
+
+            totAccel += G * tree[nInd].mass * r / (distSq * dist);
+        } else {
+            for (int i = 0; i < 4; i++) {
+                if (tree[nInd].children[i] != -1) {
+                    stack.push_back(tree[nInd].children[i]);
+                }
+            }
+        }
+    }
+    return totAccel;
+}
+
+
+void quadTreeSim::computeMassDistributionRecur(int nInd) {
     if(tree[nInd].bIndex != -1) {
         tree[nInd].mass = bodies[tree[nInd].bIndex].mass;
         tree[nInd].com = bodies[tree[nInd].bIndex].pos;
@@ -217,7 +297,7 @@ void quadTreeSim::computeMassDistribution(int nInd) {
         Vec2 weightSum = {0.0, 0.0};
         for(int i = 0; i < 4; i++) {
             if(tree[nInd].children[i] != -1) {
-                computeMassDistribution(tree[nInd].children[i]);
+                computeMassDistributionRecur(tree[nInd].children[i]);
                 totMass += tree[tree[nInd].children[i]].mass;
                 weightSum += tree[tree[nInd].children[i]].com * tree[tree[nInd].children[i]].mass;
             }
@@ -231,7 +311,8 @@ void quadTreeSim::computeMassDistribution(int nInd) {
     }
 }
 
-Vec2 quadTreeSim::computeAccel(int bInd, int nInd, bool DO_INFO, double* potEnergy = nullptr) {
+
+Vec2 quadTreeSim::computeAccelRecur(int bInd, int nInd, bool DO_INFO, double* potEnergy = nullptr) {
     if(bInd == tree[nInd].bIndex) return Vec2(0.0, 0.0);
 
     Vec2 r = tree[nInd].com - bodies[bInd].pos;
@@ -248,9 +329,11 @@ Vec2 quadTreeSim::computeAccel(int bInd, int nInd, bool DO_INFO, double* potEner
 
         for(int i = 0; i < 4; i++) {
             if(tree[nInd].children[i] != -1) {
-                totAccel += computeAccel(bInd, tree[nInd].children[i], potEnergy);
+                totAccel += computeAccelRecur(bInd, tree[nInd].children[i], potEnergy);
             }
         }
         return totAccel;
     }
 }
+
+

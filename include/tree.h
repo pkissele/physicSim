@@ -17,9 +17,11 @@ class quadTreeSim {
 
         void subdivide(int nInd);
 
-        void computeMassDistribution(int nInd);
+        void computeMassDistribution();
+        void computeMassDistributionRecur(int nInd);
 
-        Vec2 computeAccel(int bInd, int nInd, bool DO_INFO, double* potEnergy);
+        Vec2 computeAccel(int bInd, bool DO_INFO, double* potEnergy);
+        Vec2 computeAccelRecur(int bInd, int nInd, bool DO_INFO, double* potEnergy);
 
         void step(double dt, bool DO_INFO);
 

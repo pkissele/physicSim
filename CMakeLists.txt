@@ -62,7 +62,7 @@ target_link_libraries(runSim
 )
 
 # Optimization flags
-target_compile_options(runSim PRIVATE -O3)
+target_compile_options(runSim PRIVATE -O3 -march=native)
 
 # Export
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
