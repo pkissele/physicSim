@@ -1,6 +1,8 @@
 #include "main.h"
 
+#include <chrono>
 #include <iostream>
+#include <ratio>
 #include <vector>
 #include <string>
 #include <sstream>
@@ -40,8 +42,9 @@ const int screenW = 1500;
 const int screenH = 1500;
 
 // basic logging
-const bool LOG_TIME = true;
-const bool LOG_ENERGY = true;
+const bool LOG_GUI_TIME = false;
+const bool LOG_SIM_TIME = true;
+const bool LOG_ENERGY = false;
 
 // Simulation parameters
 const int N = 200000;
@@ -76,15 +79,10 @@ int main(int argc, char** argv) {
 
     // Runtime options
     bool save_frames = false;
-    bool pause_sim = false;
     bool save_single_frame = false;
-    int save_counter = 0;
-
 
     // Simulation/window state
-    globalState state{pause_sim, save_frames, save_single_frame, displayW, displayH, window};
-    state.buffers[0].resize(N);
-    state.buffers[1].resize(N);
+    globalState state{save_frames, save_single_frame, displayW, displayH, window};
 
 
     // parse optional args
@@ -99,18 +97,27 @@ int main(int argc, char** argv) {
 
 
     // Runtime variables
-    double t = 0.0;
     double dt = (double)1/FPS_TARGET;
     const double FRAME_TARGET = 1000.0/FPS_TARGET;
-    double sim_time = 0.0;
     int frame_idx = 0;
     double lastTime = glfwGetTime();
+    int lastSavedFrame = -1;
 
     // Initialize simulation
     quadTreeSim sim(N, mass, bodySize, viewW, viewH);
 
-    int step = 0;
-    bool INFO_FLAG = false;
+
+    // Threading setup
+    state.buffers[0].resize(N);
+    state.buffers[1].resize(N);
+    const auto& initBodies = sim.getBodies();
+    copy(initBodies.begin(), initBodies.end(), state.buffers[0].begin());
+    atomic<bool> running{true};
+
+
+    // Start simulation thread
+    thread simThread(simulate, ref(sim), ref(state), ref(running), dt, LOG_ENERGY, LOG_SIM_TIME);
+
 
     // instantiate NDC
     vector<float> posNDC(2 * N);
@@ -119,38 +126,39 @@ int main(int argc, char** argv) {
 
     // get uniform
     GLint colorLoc = glGetUniformLocation(program, "color");
+    int aliveN = N;
+    const vector<Body>* bodies = &state.buffers[0];
 
     cout << "Starting main loop (press ESC to quit, S to toggle saving, SPACE to pause/resume, P to save single frame)" << endl;
     while (!glfwWindowShouldClose(window)) {
-        // stagger logging
-        if (LOG_ENERGY) INFO_FLAG = (step%30 == 0);
+        // reuse data if nothing new
+        if (state.newFrame.exchange(false)) {
+            int ind;
+            {
+                lock_guard<mutex> lock(state.swapMutex);
+                ind = state.readInd.load();
+            }
+            bodies = &state.buffers[ind];
+            aliveN = bodies->size();
 
-        // simulation step
-        if (!pause_sim) sim.step(dt, INFO_FLAG);
-
-        // pull info
-        const auto& bodies = sim.getBodies();
-        int aliveN = sim.getAlive();
-
-        // resive for new particle count
-        posNDC.resize(2 * aliveN);
-        velNDC.resize(2 * aliveN);
-        sizeNDC.resize(aliveN);
-
-        // convert body positions to NDC [-1,1] for GPU
-        for (int i = 0; i < aliveN; ++i) {
-            posNDC[2*i+0] = (float)(((bodies[i].pos[0] + 0.5*(displayW-viewW)) / displayW) * 2.0 - 1.0);
-            posNDC[2*i+1] = (float)(((bodies[i].pos[1] + 0.5*(displayH-viewH)) / displayH) * 2.0 - 1.0);
-            velNDC[2*i+0] = (float)(bodies[i].vel[0]);
-            velNDC[2*i+1] = (float)(bodies[i].vel[1]);
-            sizeNDC[i] = (float)(bodies[i].size * (viewH/displayH));
+            posNDC .resize(2 * aliveN);
+            velNDC .resize(2 * aliveN);
+            sizeNDC.resize(1 * aliveN);
         }
 
+        // convert body positions to NDC [-1,1] for GPU
+        const auto& b = *bodies;
+        for (int i = 0; i < aliveN; ++i) {
+            posNDC[2*i+0] = (float)(((b[i].pos[0] + 0.5*(displayW-viewW)) / displayW) * 2.0 - 1.0);
+            posNDC[2*i+1] = (float)(((b[i].pos[1] + 0.5*(displayH-viewH)) / displayH) * 2.0 - 1.0);
+            velNDC[2*i+0] = (float)b[i].vel[0];
+            velNDC[2*i+1] = (float)b[i].vel[1];
+            sizeNDC[i]    = (float)(b[i].size * (viewH / displayH));
+        }
 
-        // upload buffers
+        uploadBuffer(posVBO,  posNDC.data(),  sizeof(float) * 2 * aliveN);
+        uploadBuffer(velVBO,  velNDC.data(),  sizeof(float) * 2 * aliveN);
         uploadBuffer(sizeVBO, sizeNDC.data(), sizeof(float) * 1 * aliveN);
-        uploadBuffer(velVBO, velNDC.data(), sizeof(float) * 2 * aliveN);
-        uploadBuffer(posVBO, posNDC.data(), sizeof(float) * 2 * aliveN);
 
         // Draw background
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -164,17 +172,19 @@ int main(int argc, char** argv) {
 
         // Put to screen
         glfwSwapBuffers(window);
-
         // keybinds
         glfwPollEvents();
 
         // saving
         if (save_frames || save_single_frame) {
-            ostringstream ss;
-            ss << outdir << "/frame_" << setw(5) << setfill('0') << frame_idx << ".png";
-            saveFramebufferPNG(ss.str(), screenW, screenH);
-            ++frame_idx;
-            save_single_frame = false;
+            int curFrame = state.simStep.load();
+            if(curFrame != lastSavedFrame) {
+                ostringstream ss;
+                ss << outdir << "/frame_" << setw(5) << setfill('0') << frame_idx << ".png";
+                saveFramebufferPNG(ss.str(), screenW, screenH);
+                ++frame_idx;
+                save_single_frame = false;
+            }
         }
 
         // frame timing
@@ -182,11 +192,12 @@ int main(int argc, char** argv) {
         double elapsed = (now - lastTime) * 1000.0;
         lastTime = now;
 
-        if (LOG_TIME) cout << fixed << elapsed << " ms of frametime" << endl;
+        if (LOG_GUI_TIME) cout << fixed << setprecision(2) << elapsed << " ms of frametime" << endl;
         if (elapsed < FRAME_TARGET) this_thread::sleep_for(chrono::milliseconds((long long)(FRAME_TARGET - elapsed)));
-
-        step += 1;
     }
+
+    running = false;
+    simThread.join();
 
     glDeleteBuffers(1, &sizeVBO);
     glDeleteBuffers(1, &velVBO);
@@ -199,12 +210,51 @@ int main(int argc, char** argv) {
 }
 
 
+
+void simulate(quadTreeSim& sim, globalState& shared, atomic<bool>& running, double dt, bool LOG_ENERGY, bool LOG_SIM_TIME) {
+    int step = 0;
+    bool INFO_FLAG = false;
+    while (running) {
+        if(shared.paused) {
+            this_thread::sleep_for(chrono::milliseconds(10));
+            continue;
+        }
+        if (LOG_ENERGY) INFO_FLAG = (step % 30 == 0);
+
+        auto start = chrono::high_resolution_clock::now();
+
+        sim.step(dt, INFO_FLAG);
+
+        auto end = chrono::high_resolution_clock::now();
+        double elapsed = chrono::duration<double, milli>(end - start).count();
+        if (LOG_SIM_TIME) cout << "simulation step took "<< fixed << setprecision(2) << elapsed << " ms" << endl;
+
+        const auto& bodies = sim.getBodies();
+        int aliveN = sim.getAlive();
+
+        int writeInd = 1 - shared.readInd.load();
+        shared.buffers[writeInd].resize(aliveN);
+        copy(bodies.begin(), bodies.begin() + aliveN, shared.buffers[writeInd].begin());
+        {
+            lock_guard<mutex> lock(shared.swapMutex);
+            shared.readInd.store(writeInd);
+            shared.newFrame.store(true);
+            shared.simStep++;
+        }
+
+        step++;
+    }
+}
+
+
+
 void keyCallback(GLFWwindow* w, int key, int sc, int action, int mods) {
     if (action != GLFW_PRESS) return;
     auto* s = (globalState*)glfwGetWindowUserPointer(w);
     switch (key) {
         case GLFW_KEY_ESCAPE: glfwSetWindowShouldClose(w, GLFW_TRUE); break;
-        case GLFW_KEY_SPACE:  s->pause_sim = !s->pause_sim; break;
+        case GLFW_KEY_Q:      glfwSetWindowShouldClose(w, GLFW_TRUE); break;
+        case GLFW_KEY_SPACE:  s->paused = !s->paused.load(); break;
         case GLFW_KEY_J:      s->save_frames = !s->save_frames; break;
         case GLFW_KEY_P:      s->save_single_frame = true; break;
         case GLFW_KEY_UP:     s->displayW *= 0.66; s->displayH *= 0.66; break;
