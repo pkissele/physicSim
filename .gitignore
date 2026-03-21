@@ -7,7 +7,7 @@
 a.out
 
 gmon.out
-perf.data
+perf.
 perf.data.**
 
 venv

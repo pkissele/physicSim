@@ -11,8 +11,6 @@ struct Node {
     double halfSize = 0.0;
     int firstChild = -1;
     int next = -1;
-
     int bIndex = -1;
-
 };
 

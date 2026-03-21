@@ -13,15 +13,18 @@ class quadTreeSim {
 
         void buildTree();
 
-        void insertParticle(int nInd, int bInd);
+        void step(double dt, bool DO_INFO);
+
+        int getQuadrant(int bInd, int nInd);
+
+        void insertParticle(int nInd);
 
         void subdivide(int nInd);
 
         void computeMassDistribution();
 
-        Vec2 computeAccel(int bInd, bool DO_INFO, double* potEnergy);
+        Vec2 computeAccel(int bInd, double thetaIn, bool DO_INFO, double* potEnergy);
 
-        void step(double dt, bool DO_INFO);
 
         const std::vector<Body>& getBodies() const { return bodies; }
 

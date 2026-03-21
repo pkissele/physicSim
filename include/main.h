@@ -29,6 +29,7 @@ struct globalState {
     std::atomic<int> readInd{0};
     std::atomic<bool> newFrame {false};
     std::atomic<bool> paused {false};
+    std::atomic<bool> guiPaused {false};
     std::mutex swapMutex;
 };
 

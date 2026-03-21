@@ -26,6 +26,6 @@ void main() {
     if(vSize > 5) {
         fragColor = vec4(color, 1);
     } else {
-        fragColor = vec4(color, 0.2);
+        fragColor = vec4(color, 0.1);
     }
 }

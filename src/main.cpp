@@ -21,7 +21,7 @@
 
 using namespace std;
 using Vec2 = Eigen::Vector2d;
-
+using Vec2f = Eigen::Vector2f;
 
 
 // view
@@ -44,11 +44,11 @@ const int screenH = 1500;
 const bool LOG_GUI_TIME = false; 
 const int LOG_GUI_TIME_INTERVAL = 30;
 const bool LOG_SIM_TIME = true;
-const bool LOG_ENERGY = true;
+const bool LOG_ENERGY = false; 
 const int LOG_ENERGY_INTERVAL = 1;
 
 // Simulation parameters
-const int N = 200000;
+const int N = 1000000;
 const double mass = 0.00005;
 const double bodySize = 5;
 const int FPS_TARGET = 60;
@@ -135,6 +135,18 @@ int main(int argc, char** argv) {
     cout << "Starting main loop (press ESC to quit, S to toggle saving, SPACE to pause/resume, P to save single frame)" << endl;
     int displayFrame = 1;
     while (!glfwWindowShouldClose(window)) {
+        if(state.paused || state.guiPaused) {
+            this_thread::sleep_for(chrono::milliseconds(10));
+            glfwPollEvents();
+            double now = glfwGetTime();
+            double elapsed = (now - lastTime) * 1000.0;
+            lastTime = now;
+
+            if (LOG_GUI_TIME && displayFrame % LOG_GUI_TIME_INTERVAL == 0) cout << fixed << setprecision(2) << elapsed << " ms of frametime" << endl;
+            if (elapsed < FRAME_TARGET) this_thread::sleep_for(chrono::milliseconds((long long)(FRAME_TARGET - elapsed)));
+            displayFrame += 1;
+            continue;
+        }
         // reuse data if nothing new
         if (state.newFrame.exchange(false)) {
             int ind;
@@ -148,21 +160,21 @@ int main(int argc, char** argv) {
             posNDC .resize(2 * aliveN);
             velNDC .resize(2 * aliveN);
             sizeNDC.resize(1 * aliveN);
-        }
 
-        // flatten data into NDC (casting to [-1, 1] done in shader)
-        const auto& b = *bodies;
-        for (int i = 0; i < aliveN; ++i) {
-            posNDC[2*i+0] = (float)b[i].pos[0];
-            posNDC[2*i+1] = (float)b[i].pos[1];
-            velNDC[2*i+0] = (float)b[i].vel[0];
-            velNDC[2*i+1] = (float)b[i].vel[1];
-            sizeNDC[i]    = (float)b[i].size;
-        }
+            // flatten data into NDC (casting to [-1, 1] done in shader)
+            const auto& b = *bodies;
+            for (int i = 0; i < aliveN; ++i) {
+                posNDC[2*i+0] = (float)b[i].pos[0];
+                posNDC[2*i+1] = (float)b[i].pos[1];
+                velNDC[2*i+0] = (float)b[i].vel[0];
+                velNDC[2*i+1] = (float)b[i].vel[1];
+                sizeNDC[i]    = (float)b[i].size;
+            }
 
-        uploadBuffer(posVBO,  posNDC.data(),  sizeof(float) * 2 * aliveN);
-        uploadBuffer(velVBO,  velNDC.data(),  sizeof(float) * 2 * aliveN);
-        uploadBuffer(sizeVBO, sizeNDC.data(), sizeof(float) * 1 * aliveN);
+            uploadBuffer(posVBO,  posNDC.data(),  sizeof(float) * 2 * aliveN);
+            uploadBuffer(velVBO,  velNDC.data(),  sizeof(float) * 2 * aliveN);
+            uploadBuffer(sizeVBO, sizeNDC.data(), sizeof(float) * 1 * aliveN);
+        }
 
         // Draw background
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -230,10 +242,9 @@ void simulate(quadTreeSim& sim, globalState& shared, atomic<bool>& running, doub
         if (LOG_ENERGY) INFO_FLAG = (step % LOG_ENERGY_INTERVAL == 0);
 
         auto start = chrono::high_resolution_clock::now();
-
         sim.step(dt, INFO_FLAG);
-
         auto end = chrono::high_resolution_clock::now();
+
         double elapsed = chrono::duration<double, milli>(end - start).count();
         if (LOG_SIM_TIME) cout << "simulation step took "<< fixed << setprecision(2) << elapsed << " ms" << endl << endl;
 
@@ -242,6 +253,7 @@ void simulate(quadTreeSim& sim, globalState& shared, atomic<bool>& running, doub
 
         int writeInd = 1 - shared.readInd.load();
         shared.buffers[writeInd].resize(aliveN);
+
         copy(bodies.begin(), bodies.begin() + aliveN, shared.buffers[writeInd].begin());
         {
             lock_guard<mutex> lock(shared.swapMutex);
@@ -249,7 +261,6 @@ void simulate(quadTreeSim& sim, globalState& shared, atomic<bool>& running, doub
             shared.newFrame.store(true);
             shared.simStep++;
         }
-
         step++;
     }
 }
@@ -264,6 +275,7 @@ void keyCallback(GLFWwindow* w, int key, int sc, int action, int mods) {
         case GLFW_KEY_Q:        glfwSetWindowShouldClose(w, GLFW_TRUE); break;
 
         case GLFW_KEY_SPACE:    s->paused = !s->paused.load(); break;
+        case GLFW_KEY_G:        s->guiPaused = !s->guiPaused.load(); break;
 
         case GLFW_KEY_J:        s->save_frames = !s->save_frames; break;
         case GLFW_KEY_P:        s->save_single_frame = true; break;
