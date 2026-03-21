@@ -42,8 +42,10 @@ const int screenH = 1500;
 
 // basic logging
 const bool LOG_GUI_TIME = false; 
+const int LOG_GUI_TIME_INTERVAL = 30;
 const bool LOG_SIM_TIME = true;
-const bool LOG_ENERGY = false;
+const bool LOG_ENERGY = true;
+const int LOG_ENERGY_INTERVAL = 1;
 
 // Simulation parameters
 const int N = 200000;
@@ -197,7 +199,7 @@ int main(int argc, char** argv) {
         double elapsed = (now - lastTime) * 1000.0;
         lastTime = now;
 
-        if (LOG_GUI_TIME && displayFrame%30 == 0) cout << fixed << setprecision(2) << elapsed << " ms of frametime" << endl;
+        if (LOG_GUI_TIME && displayFrame % LOG_GUI_TIME_INTERVAL == 0) cout << fixed << setprecision(2) << elapsed << " ms of frametime" << endl;
         if (elapsed < FRAME_TARGET) this_thread::sleep_for(chrono::milliseconds((long long)(FRAME_TARGET - elapsed)));
         displayFrame += 1;
     }
@@ -225,7 +227,7 @@ void simulate(quadTreeSim& sim, globalState& shared, atomic<bool>& running, doub
             this_thread::sleep_for(chrono::milliseconds(10));
             continue;
         }
-        if (LOG_ENERGY) INFO_FLAG = (step % 30 == 0);
+        if (LOG_ENERGY) INFO_FLAG = (step % LOG_ENERGY_INTERVAL == 0);
 
         auto start = chrono::high_resolution_clock::now();
 
@@ -233,7 +235,7 @@ void simulate(quadTreeSim& sim, globalState& shared, atomic<bool>& running, doub
 
         auto end = chrono::high_resolution_clock::now();
         double elapsed = chrono::duration<double, milli>(end - start).count();
-        if (LOG_SIM_TIME) cout << "simulation step took "<< fixed << setprecision(2) << elapsed << " ms" << endl;
+        if (LOG_SIM_TIME) cout << "simulation step took "<< fixed << setprecision(2) << elapsed << " ms" << endl << endl;
 
         const auto& bodies = sim.getBodies();
         int aliveN = sim.getAlive();

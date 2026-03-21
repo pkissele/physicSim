@@ -18,10 +18,8 @@ class quadTreeSim {
         void subdivide(int nInd);
 
         void computeMassDistribution();
-        void computeMassDistributionRecur(int nInd);
 
         Vec2 computeAccel(int bInd, bool DO_INFO, double* potEnergy);
-        Vec2 computeAccelRecur(int bInd, int nInd, bool DO_INFO, double* potEnergy);
 
         void step(double dt, bool DO_INFO);
 
@@ -36,7 +34,7 @@ class quadTreeSim {
 
     private:
         std::vector<Body> bodies;
-        std::vector<int> markDelete;
+        std::vector<int> parents;
         std::vector<Vec2> accel;
         std::vector<Vec2> accelNew;
         std::vector<Node> tree;
