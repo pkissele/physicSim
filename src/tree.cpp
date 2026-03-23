@@ -9,8 +9,10 @@
 
 #include "utils.h"
 #include "body.h"
+#include "bodies.h"
 #include "consts.h"
 #include "node.h"
+
 
 using namespace Consts;
 
@@ -38,8 +40,9 @@ uniform_real_distribution<double> randDist(0.0, 1.0);
 
 using Vec2 = Eigen::Vector2d;
 
+
 quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double viewH_)
-    : N(N_), viewW(viewW_), viewH(viewH_) {
+    : N(N_), viewW(viewW_), viewH(viewH_), bodies(N_){
 
     aliveN = N;
     nodeCnt = 0;
@@ -47,53 +50,66 @@ quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double
     accel.resize(aliveN, Vec2(0.0, 0.0));
     accelNew.resize(aliveN, Vec2(0.0, 0.0));
     tree.resize(aliveN * 8);
-    bodies.resize(aliveN);
+
     parents.reserve(aliveN);
 
     for(int i = 0; i < aliveN; ++i) {
-        bodies[i].mass = mass;
-        bodies[i].size = size;
+        bodies.mass[i] = mass;
+        bodies.size[i] = size;
     }
 
-    // Create massive central body
-    bodies[0].mass = 10;
-    bodies[0].size = 5 * size;
 
-    Vec2 comPos = {0, 0};
-    Vec2 comVel = {0, 0};
-    double totMass = 0;
 
     double screenFracScale = 2.5;
     double diskScale = min(viewW, viewH)/screenFracScale;;
 
+
+    randDisk(&bodies, diskScale);
+
+    // Create massive central body
+    bodies.mass[0] = 10;
+    bodies.size[0] = 5 * size;
+    bodies.px[0] = 0.0f;
+    bodies.py[0] = 0.0f;
+
+    double comPx = 0.0;
+    double comPy = 0.0;
+    double totMass = 0;
+
     for (int i = 0; i < aliveN; ++i) {
-        if(i != 0) {
-            randDisk(&bodies[i], diskScale, bodies[0].mass, mass, N);
-        }
-        comPos += bodies[i].pos * bodies[i].mass;
-        totMass += bodies[i].mass;
+        comPx += bodies.px[i] * bodies.mass[i];
+        comPy += bodies.py[i] * bodies.mass[i];
+        totMass += bodies.mass[i];
     }
+
+    bodies.vx[0] = 0.0f;
+    bodies.vy[0] = 0.0f;
 
     // Initialize into stable orbit
     buildTree();
     for(int i = 0; i < aliveN; ++i) {
         accel[i] = computeAccel(i, init_theta, false, nullptr);
     }
+    double comVx = 0.0;
+    double comVy = 0.0;
+    Vec2 centPos(bodies.px[0], bodies.py[0]);
+    setOrbitalVel(&bodies, accel, centPos);
     for (int i = 0; i < aliveN; ++i) {
-        if(i != 0) {
-            setOrbitalVel(&bodies[i], &accel[i], &bodies[0].pos);
-            //     randVels(&bodies[i], diskScale/4);
-            comVel += bodies[i].vel * bodies[i].mass;
-        }
+        comVx += bodies.vx[i] * bodies.mass[i];
+        comVy += bodies.vy[i] * bodies.mass[i];
     }
 
     // Center to avoid drift
-    comPos = comPos / totMass;
-    comVel = comVel / totMass;
+    comPx = comPx / totMass;
+    comPy = comPy / totMass;
+    comVx = comVx / totMass;
+    comVy = comVy / totMass;
     Vec2 center = {viewW_/2, viewH_/2};
     for (int i = 0; i < aliveN; ++i) {
-        bodies[i].pos += -comPos + center;
-        bodies[i].vel += -comVel;
+        bodies.px[i] += -comPx + center[0];
+        bodies.py[i] += -comPy + center[1];
+        bodies.vx[i] += -comVx;
+        bodies.vy[i] += -comVy;
     }
 }
 
@@ -102,13 +118,17 @@ void quadTreeSim::step(double dtIn, bool DO_INFO) {
     for (int ss = 0; ss < stepFrac; ss++) {
         bool INFO_FLAG = (ss == 0 && DO_INFO);
         double kinEnergy = 0, potEnergy = 0;
+
         // half-step velocity (kick)
         for (int i = 0; i < aliveN; ++i) {
-            bodies[i].vel += 0.5 * accel[i] * dt;
+            bodies.vx[i] += 0.5 * accel[i][0] * dt;
+            bodies.vy[i] += 0.5 * accel[i][1] * dt;
         }
+
         // full-step position (drift)
         for (int i = 0; i < aliveN; ++i) {
-            bodies[i].pos += bodies[i].vel * dt;
+            bodies.px[i] += bodies.vx[i] * dt;
+            bodies.py[i] += bodies.vy[i] * dt;
         }
 
         // recompute acceleration
@@ -123,9 +143,10 @@ void quadTreeSim::step(double dtIn, bool DO_INFO) {
 
         // half-step velocity (kick)
         for (int i = 0; i < aliveN; ++i) {
-            bodies[i].vel += 0.5 * accelNew[i]*dt;
+            bodies.vx[i] += 0.5 * accelNew[i][0] * dt;
+            bodies.vy[i] += 0.5 * accelNew[i][1] * dt;
             if (INFO_FLAG) {
-                kinEnergy += 0.5 * bodies[i].mass * (bodies[i].vel.squaredNorm());
+                kinEnergy += 0.5 * bodies.mass[i] * ((sq(bodies.vx[i])+sq(bodies.vy[i])));
             }
         }
 
@@ -149,11 +170,11 @@ void quadTreeSim::buildTree() {
     parents.clear();
     nodeCnt = 0;
 
-    for (int i = 0; i < aliveN; ++i) {
-        minCorner[0] = min(minCorner[0], bodies[i].pos[0]);
-        maxCorner[0] = max(maxCorner[0], bodies[i].pos[0]);
-        minCorner[1] = min(minCorner[1], bodies[i].pos[1]);
-        maxCorner[1] = max(maxCorner[1], bodies[i].pos[1]);
+    for (int i = 0; i < aliveN; i++) {
+        minCorner[0] = min(minCorner[0], (double)bodies.px[i]);
+        maxCorner[0] = max(maxCorner[0], (double)bodies.px[i]);
+        minCorner[1] = min(minCorner[1], (double)bodies.py[i]);
+        maxCorner[1] = max(maxCorner[1], (double)bodies.py[i]);
     }
 
     Vec2 rootCenter = {(maxCorner[0]+minCorner[0])/2, (maxCorner[1]+minCorner[1])/2};
@@ -173,11 +194,10 @@ void quadTreeSim::buildTree() {
 
 
 int quadTreeSim::getQuadrant(int bInd, int nInd) {
-    Body b = bodies[bInd];
     Node n = tree[nInd];
     int q = 0;
-    if (b.pos[0] > n.center[0]) q += 1;
-    if (b.pos[1] > n.center[1]) q += 2;
+    if (bodies.px[bInd] > n.center[0]) q += 1;
+    if (bodies.py[bInd] > n.center[1]) q += 2;
     return q;
 }
 
@@ -194,15 +214,16 @@ void quadTreeSim::insertParticle(int bInd) {
     // empty leaf
     if (tree[nInd].bIndex == -1) {
         tree[nInd].bIndex = bInd;
-        tree[nInd].mass = bodies[bInd].mass;
-        tree[nInd].com = bodies[bInd].pos;
+        tree[nInd].mass = bodies.mass[bInd];
+        tree[nInd].com[0] = bodies.px[bInd];
+        tree[nInd].com[1] = bodies.py[bInd];
         return;
     }
 
     // duplicate position
     int oldInd = tree[nInd].bIndex;
-    if (bodies[bInd].pos == bodies[oldInd].pos) {
-        tree[nInd].mass += bodies[bInd].mass;
+    if (bodies.px[bInd] == bodies.px[oldInd] && bodies.py[bInd] == bodies.py[oldInd]) {
+        tree[nInd].mass += bodies.mass[bInd];
         return;
     }
 
@@ -220,13 +241,15 @@ void quadTreeSim::insertParticle(int bInd) {
         if (quadOld != quadNew) {
             int oldChild = tree[nInd].firstChild + quadOld;
             tree[oldChild].bIndex = oldInd;
-            tree[oldChild].mass = bodies[oldInd].mass;
-            tree[oldChild].com = bodies[oldInd].pos;
+            tree[oldChild].mass = bodies.mass[oldInd];
+            tree[oldChild].com[0] = bodies.px[oldInd];
+            tree[oldChild].com[1] = bodies.py[oldInd];
 
             int newChild = tree[nInd].firstChild + quadNew;
             tree[newChild].bIndex = bInd;
-            tree[newChild].mass = bodies[bInd].mass;
-            tree[newChild].com = bodies[bInd].pos;
+            tree[newChild].mass = bodies.mass[bInd];
+            tree[newChild].com[0] = bodies.px[bInd];
+            tree[newChild].com[1] = bodies.py[bInd];
             return;
         }
 
@@ -282,18 +305,18 @@ Vec2 quadTreeSim::computeAccel(int bInd, double thetaIn, bool DO_INFO, double* p
         if (bInd == node.bIndex) { nInd = node.next; continue; }
 
         double s = node.halfSize * 2;
-        Vec2 rGeom = node.center - bodies[bInd].pos;
+        Vec2 rGeom(node.center[0] - bodies.px[bInd], node.center[1] - bodies.py[bInd]);
         double distSqGeom = rGeom.squaredNorm();
 
         // monopole criterion
         if (node.firstChild == -1 || sq(s) < sq(thetaIn) * distSqGeom) {
-            Vec2 r = node.com - bodies[bInd].pos;
+            Vec2 r(node.com[0] - bodies.px[bInd], node.com[1] - bodies.py[bInd]);
             double distSq = r.squaredNorm();
             double softDistSq = distSq + gravEpsilon2;
             double invDist = 1.0 / sqrt(softDistSq);
             totAccel += G * node.mass * r * (invDist * invDist * invDist);
             nInd = node.next;
-            if (DO_INFO && potEnergy) *potEnergy += -0.5 * G * node.mass * bodies[bInd].mass * invDist;
+            if (DO_INFO && potEnergy) *potEnergy += -0.5 * G * node.mass * bodies.mass[bInd] * invDist;
         } else {
             nInd = node.firstChild;
         }

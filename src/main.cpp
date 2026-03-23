@@ -37,8 +37,8 @@ double displayX = 0;
 double displayY = 0;
 
 // window parameters
-const int screenW = 1500;
-const int screenH = 1500;
+const int screenW = 1000;
+const int screenH = 1000;
 
 // basic logging
 const bool LOG_GUI_TIME = false; 
@@ -51,7 +51,7 @@ const int LOG_ENERGY_INTERVAL = 1;
 const int N = 1000000;
 const double mass = 0.00005;
 const double bodySize = 5;
-const int FPS_TARGET = 60;
+const int FPS_TARGET = 30;
 
 
 
@@ -66,9 +66,12 @@ int main(int argc, char** argv) {
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
 
-    GLuint posVBO  = attachVBO(0, 2, N);  // positions
-    GLuint velVBO  = attachVBO(1, 2, N);  // velocities
-    GLuint sizeVBO = attachVBO(2, 1, N);  // sizes
+    GLuint pxVBO   = attachVBO(0, 1, N);
+    GLuint pyVBO   = attachVBO(1, 1, N);
+    GLuint vxVBO   = attachVBO(2, 1, N);
+    GLuint vyVBO   = attachVBO(3, 1, N);
+    GLuint sizeVBO = attachVBO(4, 1, N);
+
 
     // Unbind VAO (important to prevent overwriting) and VBO
     glBindVertexArray(0);
@@ -109,10 +112,11 @@ int main(int argc, char** argv) {
 
 
     // Threading setup
-    state.buffers[0].resize(N);
-    state.buffers[1].resize(N);
-    const auto& initBodies = sim.getBodies();
-    copy(initBodies.begin(), initBodies.end(), state.buffers[0].begin());
+    state.buffers[0] = Buffer(N);
+    state.buffers[1] = Buffer(N);
+    Bodies& initBodies = sim.getBodies();
+    updateBuffer(state, 0, initBodies);
+    // copy(initBodies.begin(), initBodies.end(), state.buffers[0].begin());
     atomic<bool> running{true};
 
 
@@ -121,16 +125,18 @@ int main(int argc, char** argv) {
 
 
     // instantiate NDC
-    vector<float> posNDC(2 * N);
-    vector<float> velNDC(2 * N);
-    vector<float> sizeNDC(N);
+    // vector<float> pxNDC(N);
+    // vector<float> pyNDC(N);
+    // vector<float> vxNDC(N);
+    // vector<float> vyNDC(N);
+    // vector<float> sizeNDC(N);
 
     // get uniform
     GLint colorLoc =            glGetUniformLocation(program, "color");
     GLint displaySizeLoc =      glGetUniformLocation(program, "displaySize");
     GLint displayOffsetLoc =    glGetUniformLocation(program, "displayOffset");
     int aliveN = N;
-    const vector<Body>* bodies = &state.buffers[0];
+    const Buffer* buffer = &state.buffers[0];
 
     cout << "Starting main loop (press ESC to quit, S to toggle saving, SPACE to pause/resume, P to save single frame)" << endl;
     int displayFrame = 1;
@@ -154,26 +160,20 @@ int main(int argc, char** argv) {
                 lock_guard<mutex> lock(state.swapMutex);
                 ind = state.readInd.load();
             }
-            bodies = &state.buffers[ind];
-            aliveN = bodies->size();
+            buffer = &state.buffers[ind];
+            aliveN = buffer->N;
 
-            posNDC .resize(2 * aliveN);
-            velNDC .resize(2 * aliveN);
-            sizeNDC.resize(1 * aliveN);
+            // posNDC .resize(2 * aliveN);
+            // velNDC .resize(2 * aliveN);
+            // sizeNDC.resize(1 * aliveN);
 
             // flatten data into NDC (casting to [-1, 1] done in shader)
-            const auto& b = *bodies;
-            for (int i = 0; i < aliveN; ++i) {
-                posNDC[2*i+0] = (float)b[i].pos[0];
-                posNDC[2*i+1] = (float)b[i].pos[1];
-                velNDC[2*i+0] = (float)b[i].vel[0];
-                velNDC[2*i+1] = (float)b[i].vel[1];
-                sizeNDC[i]    = (float)b[i].size;
-            }
 
-            uploadBuffer(posVBO,  posNDC.data(),  sizeof(float) * 2 * aliveN);
-            uploadBuffer(velVBO,  velNDC.data(),  sizeof(float) * 2 * aliveN);
-            uploadBuffer(sizeVBO, sizeNDC.data(), sizeof(float) * 1 * aliveN);
+            uploadBuffer(pxVBO,   buffer->px.data(),   sizeof(float) * aliveN);
+            uploadBuffer(pyVBO,   buffer->py.data(),   sizeof(float) * aliveN);
+            uploadBuffer(vxVBO,   buffer->vx.data(),   sizeof(float) * aliveN);
+            uploadBuffer(vyVBO,   buffer->vy.data(),   sizeof(float) * aliveN);
+            uploadBuffer(sizeVBO, buffer->size.data(), sizeof(float) * aliveN);
         }
 
         // Draw background
@@ -220,8 +220,10 @@ int main(int argc, char** argv) {
     simThread.join();
 
     glDeleteBuffers(1, &sizeVBO);
-    glDeleteBuffers(1, &velVBO);
-    glDeleteBuffers(1, &posVBO);
+    glDeleteBuffers(1, &vyVBO);
+    glDeleteBuffers(1, &vxVBO);
+    glDeleteBuffers(1, &pyVBO);
+    glDeleteBuffers(1, &pxVBO);
     glDeleteVertexArrays(1, &vao);
     glDeleteProgram(program);
     glfwDestroyWindow(window);
@@ -248,13 +250,12 @@ void simulate(quadTreeSim& sim, globalState& shared, atomic<bool>& running, doub
         double elapsed = chrono::duration<double, milli>(end - start).count();
         if (LOG_SIM_TIME) cout << "simulation step took "<< fixed << setprecision(2) << elapsed << " ms" << endl << endl;
 
-        const auto& bodies = sim.getBodies();
+        Bodies& bodies = sim.getBodies();
         int aliveN = sim.getAlive();
 
         int writeInd = 1 - shared.readInd.load();
-        shared.buffers[writeInd].resize(aliveN);
 
-        copy(bodies.begin(), bodies.begin() + aliveN, shared.buffers[writeInd].begin());
+        updateBuffer(shared, writeInd, bodies);
         {
             lock_guard<mutex> lock(shared.swapMutex);
             shared.readInd.store(writeInd);
@@ -265,6 +266,14 @@ void simulate(quadTreeSim& sim, globalState& shared, atomic<bool>& running, doub
     }
 }
 
+
+void updateBuffer(globalState& shared, int ind, Bodies& bodies) {
+    shared.buffers[ind].px = bodies.px;
+    shared.buffers[ind].py = bodies.py;
+    shared.buffers[ind].vx = bodies.vx;
+    shared.buffers[ind].vy = bodies.vy;
+    shared.buffers[ind].size = bodies.size;
+}
 
 
 void keyCallback(GLFWwindow* w, int key, int sc, int action, int mods) {

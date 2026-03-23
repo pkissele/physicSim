@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "body.h"
+#include "bodies.h"
 #include "tree.h"
 
 #include <glad/glad.h>
@@ -12,6 +13,19 @@
 #include "atomic"
 #include "mutex"
 
+struct Buffer {
+    int N;
+    std::vector<float> px, py;
+    std::vector<float> vx, vy;
+    std::vector<float> size;
+
+    Buffer() = default;
+    Buffer(int n) : N(n) {
+        px.resize(n);
+        py.resize(n);
+        size.resize(n);
+    }
+};
 
 struct globalState {
     // Keybinds
@@ -25,7 +39,7 @@ struct globalState {
 
     // GUI-sim thread sharing
     std::atomic<int> simStep{0};
-    std::vector<Body> buffers[2];
+    Buffer buffers[2];
     std::atomic<int> readInd{0};
     std::atomic<bool> newFrame {false};
     std::atomic<bool> paused {false};
@@ -34,6 +48,8 @@ struct globalState {
 };
 
 void simulate(quadTreeSim& sim, globalState& shared, std::atomic<bool>& running, double dt, bool LOG_ENERGY, bool LOG_SIM_TIME);
+
+void updateBuffer(globalState& shared, int ind, Bodies& bodies);
 
 void keyCallback(GLFWwindow* w, int key, int sc, int action, int mods);
 
