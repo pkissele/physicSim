@@ -144,7 +144,6 @@ void quadTreeSim::buildTree() {
     Vec2 minCorner = {100000, 100000};
     Vec2 maxCorner = {-100000, -100000};
 
-
     tree.assign(aliveN * 8, Node());
 
     parents.clear();
@@ -243,8 +242,8 @@ void quadTreeSim::subdivide(int nInd) {
         tree[nodeCnt+i] = Node();
         tree[nodeCnt+i].center = tree[nInd].center;
         tree[nodeCnt+i].halfSize = tree[nInd].halfSize/2;
-        tree[nodeCnt+i].center[0] += (tree[nInd].halfSize/2) * (((int)i % 2) == 1 ? 1 : -1);
-        tree[nodeCnt+i].center[1] += (tree[nInd].halfSize/2) * (((int)i / 2) == 1 ? 1 : -1);
+        tree[nodeCnt+i].center[0] += (tree[nInd].halfSize/2) * ((i % 2) == 1 ? 1 : -1);
+        tree[nodeCnt+i].center[1] += (tree[nInd].halfSize/2) * ((i / 2) == 1 ? 1 : -1);
         tree[nodeCnt+i].next = (i < 3) ? nodeCnt + i + 1 : tree[nInd].next;
     }
     nodeCnt += 4;
