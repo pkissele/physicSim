@@ -20,8 +20,6 @@
 
 
 using namespace std;
-using Vec2 = Eigen::Vector2d;
-using Vec2f = Eigen::Vector2f;
 
 
 // view
@@ -115,8 +113,9 @@ int main(int argc, char** argv) {
     state.buffers[0] = Buffer(N);
     state.buffers[1] = Buffer(N);
     Bodies& initBodies = sim.getBodies();
+
     updateBuffer(state, 0, initBodies);
-    // copy(initBodies.begin(), initBodies.end(), state.buffers[0].begin());
+
     atomic<bool> running{true};
 
 
@@ -124,18 +123,11 @@ int main(int argc, char** argv) {
     thread simThread(simulate, ref(sim), ref(state), ref(running), dt, LOG_ENERGY, LOG_SIM_TIME);
 
 
-    // instantiate NDC
-    // vector<float> pxNDC(N);
-    // vector<float> pyNDC(N);
-    // vector<float> vxNDC(N);
-    // vector<float> vyNDC(N);
-    // vector<float> sizeNDC(N);
-
     // get uniform
-    GLint colorLoc =            glGetUniformLocation(program, "color");
-    GLint displaySizeLoc =      glGetUniformLocation(program, "displaySize");
-    GLint displayOffsetLoc =    glGetUniformLocation(program, "displayOffset");
-    int aliveN = N;
+    GLint colorLoc = glGetUniformLocation(program, "color");
+    GLint displaySizeLoc = glGetUniformLocation(program, "displaySize");
+    GLint displayOffsetLoc = glGetUniformLocation(program, "displayOffset");
+
     const Buffer* buffer = &state.buffers[0];
 
     cout << "Starting main loop (press ESC to quit, S to toggle saving, SPACE to pause/resume, P to save single frame)" << endl;
@@ -161,19 +153,12 @@ int main(int argc, char** argv) {
                 ind = state.readInd.load();
             }
             buffer = &state.buffers[ind];
-            aliveN = buffer->N;
 
-            // posNDC .resize(2 * aliveN);
-            // velNDC .resize(2 * aliveN);
-            // sizeNDC.resize(1 * aliveN);
-
-            // flatten data into NDC (casting to [-1, 1] done in shader)
-
-            uploadBuffer(pxVBO,   buffer->px.data(),   sizeof(float) * aliveN);
-            uploadBuffer(pyVBO,   buffer->py.data(),   sizeof(float) * aliveN);
-            uploadBuffer(vxVBO,   buffer->vx.data(),   sizeof(float) * aliveN);
-            uploadBuffer(vyVBO,   buffer->vy.data(),   sizeof(float) * aliveN);
-            uploadBuffer(sizeVBO, buffer->size.data(), sizeof(float) * aliveN);
+            uploadBuffer(pxVBO,   buffer->px.data(),   sizeof(float) * N);
+            uploadBuffer(pyVBO,   buffer->py.data(),   sizeof(float) * N);
+            uploadBuffer(vxVBO,   buffer->vx.data(),   sizeof(float) * N);
+            uploadBuffer(vyVBO,   buffer->vy.data(),   sizeof(float) * N);
+            uploadBuffer(sizeVBO, buffer->size.data(), sizeof(float) * N);
         }
 
         // Draw background
@@ -187,7 +172,7 @@ int main(int argc, char** argv) {
         glUniform2f(displaySizeLoc, (float)displayW, (float)displayH);
         glUniform2f(displayOffsetLoc, (float)(displayX - 0.5f * (displayW - viewW)), (float)(displayY - 0.5f * (displayH - viewH)));
  
-        drawVAO(program, vao, GL_POINTS, aliveN);
+        drawVAO(program, vao, GL_POINTS, N);
 
         // Put to screen
         glfwSwapBuffers(window);
@@ -251,7 +236,6 @@ void simulate(quadTreeSim& sim, globalState& shared, atomic<bool>& running, doub
         if (LOG_SIM_TIME) cout << "simulation step took "<< fixed << setprecision(2) << elapsed << " ms" << endl << endl;
 
         Bodies& bodies = sim.getBodies();
-        int aliveN = sim.getAlive();
 
         int writeInd = 1 - shared.readInd.load();
 

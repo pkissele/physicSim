@@ -3,7 +3,6 @@
 #include <string>
 #include <vector>
 
-#include "body.h"
 #include "bodies.h"
 #include "tree.h"
 

@@ -2,11 +2,8 @@
 #include <vector>
 #include <Eigen/Dense>
 
-#include "body.h"
 #include "bodies.h"
 #include "node.h"
-
-using Vec2 = Eigen::Vector2d;
 
 class quadTreeSim {
     public:
@@ -24,22 +21,19 @@ class quadTreeSim {
 
         void computeMassDistribution();
 
-        Vec2 computeAccel(int bInd, double thetaIn, bool DO_INFO, double* potEnergy);
+        void computeAccel(int bInd, float thetaIn, std::vector<float>& axOut, std::vector<float>& ayOut, bool DO_INFO, double* potEnergy);
 
         Bodies& getBodies() { return bodies; }
 
-        const int getAlive() const { return aliveN; }
+        const int getN() const { return N; }
 
         double viewW, viewH;
         int N;
-        int aliveN;
         int nodeCnt;
 
     private:
         Bodies bodies;
         // std::vector<Body> bodies;
         std::vector<int> parents;
-        std::vector<Vec2> accel;
-        std::vector<Vec2> accelNew;
         std::vector<Node> tree;
 };
