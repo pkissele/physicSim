@@ -11,6 +11,8 @@ class quadTreeSim {
 
         void buildTree();
 
+        void reorderBodies();
+
         void step(double dt, bool DO_INFO);
 
         int getQuadrant(int bInd, int nInd);
@@ -33,7 +35,8 @@ class quadTreeSim {
 
     private:
         Bodies bodies;
-        // std::vector<Body> bodies;
-        std::vector<int> parents;
+        // std::vector<int> parents;
         std::vector<Node> tree;
+        std::vector<int> order;
+        std::vector<uint32_t> mortonCodes;
 };

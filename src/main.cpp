@@ -23,8 +23,8 @@ using namespace std;
 
 
 // view
-const double viewW = 20.0;
-const double viewH = 20.0;
+const double viewW = 30.0;
+const double viewH = 30.0;
 
 // Current display scaling
 double displayW = viewW;

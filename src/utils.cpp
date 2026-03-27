@@ -22,23 +22,33 @@ mt19937_64 rngBody(random_device{}());
 uniform_real_distribution<double> dist01(0.0, 1.0);
 
 
-// Morton ordering for quadtree cache locality
-auto morton(Vec2 pos, Vec2 min, Vec2 max) -> uint32_t {
-    uint64_t x = (uint64_t)((pos[0] - min[0]) / (max[0] - min[0]) * 0xFFFFFFFF);
-    uint64_t y = (uint64_t)((pos[1] - min[1]) / (max[1] - min[1]) * 0xFFFFFFFF);
-    uint64_t code = 0;
-    for (int i = 0; i < 32; i++) {
-        code |= ((x >> i) & 1) << (2*i);
-        code |= ((y >> i) & 1) << (2*i + 1);
-    }
-    return code;
-};
+uint32_t expandBits(uint32_t x) {
+    // expand 16 bit to 32 bit by interleaving zeros
+    x &= 0x0000FFFF;
+    x = (x | x << 8)  & 0x00FF00FF;
+    x = (x | x << 4)  & 0x0F0F0F0F;
+    x = (x | x << 2)  & 0x33333333;
+    x = (x | x << 1)  & 0x55555555;
+    return x;
+}
 
 
-void randDisk(Bodies& b, double maxRad) {
+// Optimal spacial ordering
+uint32_t mortonCode(float x, float y, float minX, float minY, float invScale) {
+    // Normalize to [0, 65535]
+    uint32_t ix = (uint32_t)((x - minX) * invScale * 65535.0f);
+    uint32_t iy = (uint32_t)((y - minY) * invScale * 65535.0f);
+    ix = min(ix, 65535u);
+    iy = min(iy, 65535u);
+    return (expandBits(ix) | (expandBits(iy) << 1));
+}
+
+
+void randDisk(Bodies& b, double maxRad, double minRad) {
     for(int i = 0; i < b.N; ++i) {
         double theta = dist01(rngBody) * 2.0 * M_PI;
-        double r = maxRad * pow(dist01(rngBody), 0.5);
+        // double r = (maxRad-minRad) * pow(dist01(rngBody), 1) + minRad;
+        double r = (maxRad-minRad) * pow(dist01(rngBody), 0.5) + minRad;
 
         Vec2 pos(r * cos(theta), r * sin(theta));
 

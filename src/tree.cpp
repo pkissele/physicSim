@@ -6,6 +6,7 @@
 #include <cmath>
 #include <iostream>
 #include <algorithm>
+#include <execution>
 
 #include "utils.h"
 #include "bodies.h"
@@ -30,6 +31,7 @@ const float theta = 1;
 const float init_theta = 0.5; // more accurate initialization
 
 double gravEpsilon = 0.005;
+// double gravEpsilon = 0.01;
 double gravEpsilon2 = sq(gravEpsilon);
 
 double stepFrac = 1; // Janky sub-stepping
@@ -37,75 +39,6 @@ double stepFrac = 1; // Janky sub-stepping
 mt19937 rng(random_device{}());
 uniform_real_distribution<double> randDist(0.0, 1.0);
 
-
-quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double viewH_)
-    : N(N_), viewW(viewW_), viewH(viewH_), bodies(N_){
-
-
-    cout << sizeof(Node) << endl;
-
-    nodeCnt = 0;
-    tree.resize(N * 8);
-
-    parents.reserve(N);
-
-    for(int i = 0; i < N; ++i) {
-        bodies.mass[i] = mass;
-        bodies.size[i] = size;
-    }
-
-    double screenFracScale = 2.5;
-    double diskScale = min(viewW, viewH)/screenFracScale;;
-
-    randDisk(bodies, diskScale);
-
-    // Create massive central body
-    bodies.mass[0] = 10;
-    bodies.size[0] = 5 * size;
-    bodies.px[0] = 0.0f;
-    bodies.py[0] = 0.0f;
-
-    double comPx = 0.0;
-    double comPy = 0.0;
-    double totMass = 0;
-
-    for (int i = 0; i < N; ++i) {
-        comPx += bodies.px[i] * bodies.mass[i];
-        comPy += bodies.py[i] * bodies.mass[i];
-        totMass += bodies.mass[i];
-    }
-
-    bodies.vx[0] = 0.0f;
-    bodies.vy[0] = 0.0f;
-
-    // Initialize into stable orbit
-    buildTree();
-    for(int i = 0; i < N; ++i) {
-        computeAccel(i, init_theta, bodies.ax, bodies.ay, false, nullptr);
-    }
-
-    float comVx = 0.0;
-    float comVy = 0.0;
-    setOrbitalVel(bodies, bodies.px[0], bodies.py[0]);
-    for (int i = 0; i < N; ++i) {
-        comVx += bodies.vx[i] * bodies.mass[i];
-        comVy += bodies.vy[i] * bodies.mass[i];
-    }
-
-    // Center to avoid drift
-    comPx = comPx / totMass;
-    comPy = comPy / totMass;
-    comVx = comVx / totMass;
-    comVy = comVy / totMass;
-    float centX = viewW_/2;
-    float centY = viewH_/2;
-    for (int i = 0; i < N; ++i) {
-        bodies.px[i] += -comPx + centX;
-        bodies.py[i] += -comPy + centY;
-        bodies.vx[i] += -comVx;
-        bodies.vy[i] += -comVy;
-    }
-}
 
 
 void quadTreeSim::step(double dtIn, bool DO_INFO) {
@@ -115,29 +48,37 @@ void quadTreeSim::step(double dtIn, bool DO_INFO) {
         double kinEnergy = 0, potEnergy = 0;
 
         // half-step velocity (kick)
-        for (int i = 0; i < N; ++i) {
+        for (int i = 0; i < N; i++) {
             bodies.vx[i] += 0.5f * bodies.ax[i] * dt;
             bodies.vy[i] += 0.5f * bodies.ay[i] * dt;
         }
 
         // full-step position (drift)
-        for (int i = 0; i < N; ++i) {
+        for (int i = 0; i < N; i++) {
             bodies.px[i] += bodies.vx[i] * dt;
             bodies.py[i] += bodies.vy[i] * dt;
         }
 
         // recompute acceleration
-        buildTree();
         auto start = chrono::high_resolution_clock::now();
-        for (int i = 0; i < N; ++i) {
-            computeAccel(i, theta, bodies.axNew, bodies.ayNew, DO_INFO, &potEnergy);
-        }
+        buildTree();
         auto end = chrono::high_resolution_clock::now();
         double elapsed = chrono::duration<double, milli>(end - start).count();
-        cout << "accel step took "<< fixed << elapsed << " ms" << endl << endl;
+        cout << "build tree took "<< fixed << elapsed << " ms" << endl;
+
+        start = chrono::high_resolution_clock::now();
+
+        #pragma omp parallel for schedule(dynamic, 64)
+        for (int i = 0; i < N; i++) {
+            computeAccel(i, theta, bodies.axNew, bodies.ayNew, DO_INFO, &potEnergy);
+        }
+
+        end = chrono::high_resolution_clock::now();
+        elapsed = chrono::duration<double, milli>(end - start).count();
+        cout << "accel step took "<< fixed << elapsed << " ms" << endl;
 
         // half-step velocity (kick)
-        for (int i = 0; i < N; ++i) {
+        for (int i = 0; i < N; i++) {
             bodies.vx[i] += 0.5f * bodies.axNew[i] * dt;
             bodies.vy[i] += 0.5f * bodies.ayNew[i] * dt;
             if (INFO_FLAG) {
@@ -164,7 +105,7 @@ void quadTreeSim::buildTree() {
 
     fill(tree.begin(), tree.begin() + nodeCnt, Node());
 
-    parents.clear();
+    // parents.clear();
     nodeCnt = 0;
 
     for (int i = 0; i < N; i++) {
@@ -177,6 +118,22 @@ void quadTreeSim::buildTree() {
     float rootCenterX = (maxX + minX)/2.0f;
     float rootCenterY = (maxY + minY)/2.0f;
     float rootHalfSize = max(abs(maxX - minX), abs(maxY - minY))/2;
+
+
+    // Sort by morton ordering for cache efficiency
+    float scale = max(maxX - minX, maxY - minY);
+    float invScale = 1.0f / scale;
+
+    for (int i = 0; i < N; i++) {
+        mortonCodes[i] = mortonCode(bodies.px[i], bodies.py[i], minX, minY, invScale);
+        order[i] = i;
+    }
+
+    sort(order.begin(), order.end(), [&](int a, int b) {
+        return mortonCodes[a] < mortonCodes[b];
+    });
+
+    reorderBodies();
 
     tree[0] = Node();
     tree[0].cx = rootCenterX;
@@ -192,12 +149,35 @@ void quadTreeSim::buildTree() {
 }
 
 
+
 int quadTreeSim::getQuadrant(int bInd, int nInd) {
     const Node& n = tree[nInd];
     int q = 0;
     if (bodies.px[bInd] > n.cx) q += 1;
     if (bodies.py[bInd] > n.cy) q += 2;
     return q;
+}
+
+
+void quadTreeSim::reorderBodies() {
+    static std::vector<float> tmp;
+    tmp.resize(N);
+
+    auto reorderArray = [&](std::vector<float>& arr) {
+        for (int i = 0; i < N; i++) tmp[i] = arr[order[i]];
+        std::swap(arr, tmp);
+    };
+
+    reorderArray(bodies.px);
+    reorderArray(bodies.py);
+    reorderArray(bodies.vx);
+    reorderArray(bodies.vy);
+    reorderArray(bodies.ax);
+    reorderArray(bodies.ay);
+    reorderArray(bodies.axNew);
+    reorderArray(bodies.ayNew);
+    reorderArray(bodies.mass);
+    reorderArray(bodies.size);
 }
 
 
@@ -259,7 +239,7 @@ void quadTreeSim::insertParticle(int bInd) {
 
 
 void quadTreeSim::subdivide(int nInd) {
-    parents.push_back(nInd);
+    // parents.push_back(nInd);
     tree[nInd].firstChild = nodeCnt;
     for(int i = 0; i < 4; i++) {
         tree[nodeCnt+i] = Node();
@@ -275,25 +255,19 @@ void quadTreeSim::subdivide(int nInd) {
 
 
 void quadTreeSim::computeMassDistribution() {
-    // process bottom up 
-    for (int i = parents.size() - 1; i >= 0; i--) {
-        int nInd = parents[i];
-        if(tree[nInd].firstChild == -1) continue;
-
-        float totMass = 0;
-        float weightSumX = 0.0f;
-        float weightSumY = 0.0f;
-
+    for (int i = nodeCnt - 1; i >= 0; i--) {
+        if (tree[i].firstChild == -1) continue;  // leaf, skip
+        
+        float totMass = 0, weightSumX = 0, weightSumY = 0;
         for (int c = 0; c < 4; c++) {
-            int child = tree[nInd].firstChild + c;
-            totMass += tree[child].mass;
-            weightSumX += tree[child].comx * tree[child].mass;
-            weightSumY += tree[child].comy * tree[child].mass;
+            int child = tree[i].firstChild + c;
+            totMass     += tree[child].mass;
+            weightSumX  += tree[child].comx * tree[child].mass;
+            weightSumY  += tree[child].comy * tree[child].mass;
         }
-
-        tree[nInd].mass = totMass;
-        tree[nInd].comx = totMass != 0.0f ? weightSumX / totMass : 0.0f;
-        tree[nInd].comy = totMass != 0.0f ? weightSumY / totMass : 0.0f;
+        tree[i].mass = totMass;
+        tree[i].comx = totMass > 0 ? weightSumX / totMass : 0;
+        tree[i].comy = totMass > 0 ? weightSumY / totMass : 0;
     }
 }
 
@@ -310,8 +284,8 @@ void quadTreeSim::computeAccel(int bInd, float thetaIn, vector<float>& axOut, ve
     while (nInd != -1) {
         const Node& node = tree[nInd];
 
-        if (node.mass == 0.0) { nInd = node.next; continue; }
-        if (bInd == node.bIndex) { nInd = node.next; continue; }
+        // if (node.mass == 0.0) { nInd = node.next; continue; }
+        // if (bInd == node.bIndex) { nInd = node.next; continue; }
 
         float s = node.halfSize * 2;
         float rGeomX = node.cx - bodies.px[bInd];
@@ -339,3 +313,81 @@ void quadTreeSim::computeAccel(int bInd, float thetaIn, vector<float>& axOut, ve
     axOut[bInd] = totAccX;
     ayOut[bInd] = totAccY;
 }
+
+
+
+// Constructor initalizes
+quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double viewH_)
+    : N(N_), viewW(viewW_), viewH(viewH_), bodies(N_){
+    nodeCnt = 0;
+    tree.resize(N * 8);
+    // parents.reserve(N);
+
+    mortonCodes.resize(N);
+    order.resize(N);
+
+    for(int i = 0; i < N; i++) {
+        bodies.mass[i] = mass;
+        bodies.size[i] = size;
+    }
+
+    double screenFracScale = 2.5;
+    double diskScale = min(viewW, viewH)/screenFracScale;;
+
+    randDisk(bodies, diskScale, 0.3);
+
+    // Create massive central body
+    bodies.mass[0] = 20;
+    bodies.size[0] = 5 * size;
+    bodies.px[0] = 0.0f;
+    bodies.py[0] = 0.0f;
+
+
+    // Initialize into stable orbit
+    buildTree();
+    for(int i = 0; i < N; i++) {
+        computeAccel(i, init_theta, bodies.ax, bodies.ay, false, nullptr);
+    }
+
+    setOrbitalVel(bodies, 0, 0);
+
+    double comPx = 0.0;
+    double comPy = 0.0;
+    double comVx = 0.0;
+    double comVy = 0.0;
+    double totMass = 0;
+
+    for (int i = 0; i < N; i++) {
+        comPx += bodies.px[i] * bodies.mass[i];
+        comPy += bodies.py[i] * bodies.mass[i];
+        comVx += bodies.vx[i] * bodies.mass[i];
+        comVy += bodies.vy[i] * bodies.mass[i];
+        totMass += bodies.mass[i];
+    }
+
+    // Center to avoid drift
+    comPx = comPx / totMass;
+    comPy = comPy / totMass;
+    comVx = comVx / totMass;
+    comVy = comVy / totMass;
+    float centX = viewW_/2;
+    float centY = viewH_/2;
+    for (int i = 0; i < N; i++) {
+        bodies.px[i] += -comPx + centX;
+        bodies.py[i] += -comPy + centY;
+        bodies.vx[i] += -comVx;
+        bodies.vy[i] += -comVy;
+    }
+
+    // Remove central body velocity
+    int centralIdx = 0;
+    for (int i = 0; i < N; i++) {
+        if (order[i] == 0) { 
+            bodies.vx[i] = 0;
+            bodies.vy[i] = 0;
+            break; 
+        }
+    }
+}
+
+
