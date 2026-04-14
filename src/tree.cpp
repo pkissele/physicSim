@@ -30,14 +30,11 @@ const bool COLLISION_FLAG = true;
 const float theta = 1;
 const float init_theta = 0.5; // more accurate initialization
 
-double gravEpsilon = 0.005;
+double gravEpsilon = 0.01;
 // double gravEpsilon = 0.01;
 double gravEpsilon2 = sq(gravEpsilon);
 
 double stepFrac = 1; // Janky sub-stepping
-
-mt19937 rng(random_device{}());
-uniform_real_distribution<double> randDist(0.0, 1.0);
 
 
 
@@ -320,8 +317,8 @@ void quadTreeSim::computeAccel(int bInd, float thetaIn, vector<float>& axOut, ve
 quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double viewH_)
     : N(N_), viewW(viewW_), viewH(viewH_), bodies(N_){
     nodeCnt = 0;
+
     tree.resize(N * 8);
-    // parents.reserve(N);
 
     mortonCodes.resize(N);
     order.resize(N);
@@ -334,13 +331,14 @@ quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double
     double screenFracScale = 2.5;
     double diskScale = min(viewW, viewH)/screenFracScale;;
 
-    randDisk(bodies, diskScale, 0.3);
+    // randDisk(bodies, diskScale, 0.3);
+    randDisk(bodies, diskScale, 0);
 
     // Create massive central body
-    bodies.mass[0] = 20;
-    bodies.size[0] = 5 * size;
-    bodies.px[0] = 0.0f;
-    bodies.py[0] = 0.0f;
+    // bodies.mass[0] = 20;
+    // bodies.size[0] = 5 * size;
+    // bodies.px[0] = 0.0f;
+    // bodies.py[0] = 0.0f;
 
 
     // Initialize into stable orbit
