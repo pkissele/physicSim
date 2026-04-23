@@ -42,6 +42,7 @@ const int screenH = 1000;
 const bool LOG_GUI_TIME = false; 
 const int LOG_GUI_TIME_INTERVAL = 30;
 const bool LOG_SIM_TIME = true;
+const int LOG_SIM_TIME_INTERVAL = 30;
 const bool LOG_ENERGY = false; 
 const int LOG_ENERGY_INTERVAL = 1;
 
@@ -220,20 +221,20 @@ int main(int argc, char** argv) {
 
 void simulate(quadTreeSim& sim, globalState& shared, atomic<bool>& running, double dt, bool LOG_ENERGY, bool LOG_SIM_TIME) {
     int step = 0;
-    bool INFO_FLAG = false;
+    bool INFO_FLAG_ENERGY = false;
     while (running) {
         if(shared.paused) {
             this_thread::sleep_for(chrono::milliseconds(10));
             continue;
         }
-        if (LOG_ENERGY) INFO_FLAG = (step % LOG_ENERGY_INTERVAL == 0);
+        if (LOG_ENERGY) INFO_FLAG_ENERGY = (step % LOG_ENERGY_INTERVAL == 0);
 
         auto start = chrono::high_resolution_clock::now();
-        sim.step(dt, INFO_FLAG);
+        sim.step(dt, INFO_FLAG_ENERGY, step%LOG_SIM_TIME_INTERVAL==0);
         auto end = chrono::high_resolution_clock::now();
 
         double elapsed = chrono::duration<double, milli>(end - start).count();
-        if (LOG_SIM_TIME) cout << "simulation step took "<< fixed << setprecision(2) << elapsed << " ms" << endl << endl;
+        if (LOG_SIM_TIME && step%LOG_SIM_TIME_INTERVAL==0) cout << "simulation step took "<< fixed << setprecision(2) << elapsed << " ms" << endl << endl;
 
         Bodies& bodies = sim.getBodies();
 

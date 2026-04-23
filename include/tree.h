@@ -11,13 +11,13 @@ class quadTreeSim {
 
         void buildTree();
 
+        void buildSubtree(int nInd, int depth);
+
         void reorderBodies();
 
-        void step(double dt, bool DO_INFO);
+        void step(double dt, bool LOG_ENERGY, bool LOG_TIME);
 
         int getQuadrant(int bInd, int nInd);
-
-        void insertParticle(int nInd);
 
         void subdivide(int nInd);
 
@@ -31,12 +31,14 @@ class quadTreeSim {
 
         double viewW, viewH;
         int N;
-        int nodeCnt;
+        // int nodeCnt;
+        std::atomic<int> nodeCnt;
 
     private:
         Bodies bodies;
-        // std::vector<int> parents;
+
+        // std::vector<Node> tree;
         std::vector<Node> tree;
-        std::vector<int> order;
-        std::vector<uint32_t> mortonCodes;
+
+        std::vector<int> buildIndices;
 };
