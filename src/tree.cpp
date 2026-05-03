@@ -31,13 +31,16 @@ const float theta = 1;
 const float init_theta = 0.5; // more accurate initialization
 
 double gravEpsilon = 0.01;
-// double gravEpsilon = 0.01;
 double gravEpsilon2 = sq(gravEpsilon);
 
 double stepFrac = 1; // Janky sub-stepping
 
 const int LEAF_CAPACITY = 4;
-const int THREAD_CAPACITY = 4096; 
+const int THREAD_CAPACITY = 4096;
+
+const float MIN_NODE_SIZE = 1e-6f;
+
+
 
 
 void quadTreeSim::step(double dtIn, bool LOG_ENERGY, bool LOG_TIME) {
@@ -58,7 +61,6 @@ void quadTreeSim::step(double dtIn, bool LOG_ENERGY, bool LOG_TIME) {
             bodies.py[i] += bodies.vy[i] * dt;
         }
 
-
         auto start = chrono::high_resolution_clock::now();
         buildTree();
         auto end = chrono::high_resolution_clock::now();
@@ -70,8 +72,8 @@ void quadTreeSim::step(double dtIn, bool LOG_ENERGY, bool LOG_TIME) {
         #pragma omp parallel for schedule(dynamic, 64) reduction(+:potEnergy)
         for (int i = 0; i < N; i++) {
             double localPE = 0.0;
-            computeAccel(i, theta, bodies.axNew, bodies.ayNew, LOG_ENERGY,
-                        LOG_ENERGY ? &localPE : nullptr);
+            long long localVis = 0;
+            computeAccel(i, theta, bodies.axNew, bodies.ayNew, LOG_ENERGY, LOG_ENERGY ? &localPE : nullptr);
             potEnergy += localPE;
         }
         end = chrono::high_resolution_clock::now();
@@ -104,6 +106,7 @@ void quadTreeSim::buildTree() {
     float maxX = -1e9, maxY = -1e9;
 
     fill(tree.begin(), tree.begin() + nodeCnt, Node());
+    fill(treeCold.begin(), treeCold.begin() + nodeCnt, NodeCold());
     nodeCnt = 0;
 
     for (int i = 0; i < N; i++) {
@@ -116,18 +119,59 @@ void quadTreeSim::buildTree() {
     std::iota(buildIndices.begin(), buildIndices.end(), 0);
 
     tree[0] = Node();
-    tree[0].cx = (maxX + minX) / 2.0f;
-    tree[0].cy = (maxY + minY) / 2.0f;
+    treeCold[0].cx = (maxX + minX) / 2.0f;
+    treeCold[0].cy = (maxY + minY) / 2.0f;
     tree[0].halfSize = max(abs(maxX - minX), abs(maxY - minY)) / 2.0f;
     tree[0].lo = 0;
     tree[0].hi = N;
     tree[0].next = -1;
     nodeCnt = 1;
 
+    std::vector<int> sharedQueue = {0};
+    std::mutex queueMutex;
+    std::atomic<int> bodiesProcessed = 0;
+
     #pragma omp parallel
     {
-        #pragma omp single
-        buildSubtree(0, 0);
+        std::vector<int> localStack;
+        localStack.reserve(256);
+
+        while (bodiesProcessed.load(std::memory_order_relaxed) < N) {
+            int node = -1;
+            {
+                std::lock_guard<std::mutex> lock(queueMutex);
+                if (!sharedQueue.empty()) {
+                    node = sharedQueue.back();
+                    sharedQueue.pop_back();
+                }
+            }
+            if (node == -1) continue;
+            int cnt = tree[node].hi - tree[node].lo;
+
+            if (cnt >= THREAD_CAPACITY) {
+                partitionNode(node);
+                int fc = tree[node].firstChild;
+                std::lock_guard<std::mutex> lock(queueMutex);
+                for (int c = 0; c < 4; c++)
+                    if (tree[fc+c].hi > tree[fc+c].lo)
+                        sharedQueue.push_back(fc + c);
+            } else {
+                bodiesProcessed.fetch_add(cnt, std::memory_order_relaxed);
+                localStack.push_back(node);
+                while (!localStack.empty()) {
+                    int n = localStack.back(); localStack.pop_back();
+                    if (tree[n].hi - tree[n].lo <= LEAF_CAPACITY || tree[n].halfSize < MIN_NODE_SIZE) {
+                        makeLeaf(n);
+                        continue;
+                    }
+                    partitionNode(n);
+                    int fc = tree[n].firstChild;
+                    for (int c = 3; c >= 0; c--)
+                        if (tree[fc+c].hi > tree[fc+c].lo)
+                            localStack.push_back(fc + c);
+                }
+            }
+        }
     }
 
     reorderBodies();
@@ -135,80 +179,41 @@ void quadTreeSim::buildTree() {
 }
 
 
-void quadTreeSim::buildSubtree(int nInd, int depth) {
+void quadTreeSim::makeLeaf(int nInd) {
     int lo = tree[nInd].lo;
     int hi = tree[nInd].hi;
-    int count = hi - lo;
-
-    auto makeLeaf = [&]() {
-        float m = 0, wx = 0, wy = 0;
-        for (int ii = lo; ii < hi; ii++) {
-            int i = buildIndices[ii];
-            m  += bodies.mass[i];
-            wx += bodies.mass[i] * bodies.px[i];
-            wy += bodies.mass[i] * bodies.py[i];
-        }
-        tree[nInd].mass = m;
-        tree[nInd].comx = m > 0 ? wx / m : 0;
-        tree[nInd].comy = m > 0 ? wy / m : 0;
-    };
-
-    if (count <= LEAF_CAPACITY || depth > 52) {
-        makeLeaf();
-        return;
-    }
-
-    float firstX = bodies.px[buildIndices[lo]];
-    float firstY = bodies.py[buildIndices[lo]];
-    bool allSame = true;
-    for (int ii = lo + 1; ii < hi; ii++) {
+    float m = 0, wx = 0, wy = 0;
+    for (int ii = lo; ii < hi; ii++) {
         int i = buildIndices[ii];
-        if (bodies.px[i] != firstX || bodies.py[i] != firstY) {
-            allSame = false;
-            break;
-        }
+        m += bodies.mass[i];
+        wx += bodies.mass[i] * bodies.px[i];
+        wy += bodies.mass[i] * bodies.py[i];
     }
-    if (allSame) {
-        makeLeaf();
-        return;
-    }
+    tree[nInd].mass = m;
+    tree[nInd].comx = m > 0 ? wx / m : 0;
+    tree[nInd].comy = m > 0 ? wy / m : 0;
+}
 
-    float cx = tree[nInd].cx;
-    float cy = tree[nInd].cy;
+
+void quadTreeSim::partitionNode(int nInd) {
+    float cx = treeCold[nInd].cx;
+    float cy = treeCold[nInd].cy;
+    int lo = tree[nInd].lo;
+    int hi = tree[nInd].hi;
     int* idx = buildIndices.data();
 
-    auto midIt = std::partition(idx + lo, idx + hi, [&](int i) {return bodies.py[i] < cy;});
+    auto midIt = std::partition(idx + lo, idx + hi, [&](int i) { return bodies.py[i] < cy; });
     int mid = midIt - idx;
-    auto q01It = std::partition(idx + lo,  idx + mid, [&](int i) {return bodies.px[i] < cx;});
-    auto q23It = std::partition(idx + mid, idx + hi,  [&](int i) {return bodies.px[i] < cx;});
+    auto q01It = std::partition(idx + lo, idx + mid, [&](int i) { return bodies.px[i] < cx; });
+    auto q23It = std::partition(idx + mid, idx + hi, [&](int i) { return bodies.px[i] < cx; });
     int splits[5] = { lo, (int)(q01It - idx), mid, (int)(q23It - idx), hi };
 
     subdivide(nInd);
     int fc = tree[nInd].firstChild;
-
-    for (int q = 0; q < 4; q++) {
-        int child = fc + q;
-        tree[child].lo = splits[q];
-        tree[child].hi = splits[q + 1];
-
-        int cnt = splits[q+1] - splits[q];
-        if (cnt >= THREAD_CAPACITY) {
-            #pragma omp task firstprivate(child, depth) default(shared)
-            buildSubtree(child, depth + 1);
-        } else {
-            buildSubtree(child, depth + 1);
-        }
+    for (int c = 0; c < 4; c++) {
+        tree[fc + c].lo = splits[c];
+        tree[fc + c].hi = splits[c + 1];
     }
-}
-
-
-
-int quadTreeSim::getQuadrant(int bInd, int nInd) {
-    const Node& n = tree[nInd];
-    int q = 0;
-    if (bodies.px[bInd] > n.cx) q += 1;
-    if (bodies.py[bInd] > n.cy) q += 2;
-    return q;
 }
 
 
@@ -239,12 +244,12 @@ void quadTreeSim::reorderBodies() {
 
 void quadTreeSim::subdivide(int nInd) {
     int base = nodeCnt.fetch_add(4, std::memory_order_relaxed);
-    assert(base + 4 <= (int)tree.size());
+    // assert(base + 4 <= (int)tree.size());
     tree[nInd].firstChild = base;
     for (int i = 0; i < 4; i++) {
         tree[base+i] = Node();
-        tree[base+i].cx = tree[nInd].cx + (tree[nInd].halfSize/2) * ((i & 1) ? 1 : -1);
-        tree[base+i].cy = tree[nInd].cy + (tree[nInd].halfSize/2) * ((i & 2) ? 1 : -1);
+        treeCold[base+i].cx = treeCold[nInd].cx + (tree[nInd].halfSize/2) * ((i & 1) ? 1 : -1);
+        treeCold[base+i].cy = treeCold[nInd].cy + (tree[nInd].halfSize/2) * ((i & 2) ? 1 : -1);
         tree[base+i].halfSize = tree[nInd].halfSize / 2;
         tree[base+i].next = (i < 3) ? base + i + 1 : tree[nInd].next;
     }
@@ -327,6 +332,7 @@ quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double
     nodeCnt = 0;
 
     tree.resize(N * 8);
+    treeCold.resize(N * 8);
 
     buildIndices.resize(N);
     std::iota(buildIndices.begin(), buildIndices.end(), 0);

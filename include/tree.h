@@ -11,9 +11,13 @@ class quadTreeSim {
 
         void buildTree();
 
-        void buildSubtree(int nInd, int depth);
+        void partitionNode(int nInd);
+
+        void makeLeaf(int nInd);
 
         void reorderBodies();
+
+        void dfsReorder();
 
         void step(double dt, bool LOG_ENERGY, bool LOG_TIME);
 
@@ -37,8 +41,8 @@ class quadTreeSim {
     private:
         Bodies bodies;
 
-        // std::vector<Node> tree;
         std::vector<Node> tree;
+        std::vector<NodeCold> treeCold;
 
         std::vector<int> buildIndices;
 };

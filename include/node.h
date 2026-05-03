@@ -5,8 +5,6 @@
 using Vec2 = Eigen::Vector2d;
 
 struct Node {
-    float cx = 0.0f;
-    float cy = 0.0f;
     float comx = 0.0f;
     float comy = 0.0f;
 
@@ -17,4 +15,9 @@ struct Node {
 
     int lo = 0;
     int hi = 0;
+};
+
+struct NodeCold {
+    float cx = 0.0f;
+    float cy = 0.0f;
 };
