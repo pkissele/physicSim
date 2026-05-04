@@ -1,17 +1,13 @@
 #pragma once
 
-#include <Eigen/Dense>
-
-using Vec2 = Eigen::Vector2d;
-
 struct Node {
     float comx = 0.0f;
     float comy = 0.0f;
-
-    float halfSize = 0.0f;
+    float size = 0.0f;
     float mass = 0.0f;
-    int firstChild = -1;
+
     int next = -1;
+    int firstChild = -1;
 
     int lo = 0;
     int hi = 0;

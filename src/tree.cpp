@@ -23,23 +23,18 @@ using namespace std;
 template<typename T> inline constexpr T sq(T x) { return x * x; }
 
 
-const double collRad = 0.01;
-const double collMassRatio = 10;
-const bool COLLISION_FLAG = true;
-
 const float theta = 1;
 const float init_theta = 0.5; // more accurate initialization
 
-double gravEpsilon = 0.01;
-double gravEpsilon2 = sq(gravEpsilon);
+const double gravEpsilon = 0.01;
+const double gravEpsilon2 = sq(gravEpsilon);
 
-double stepFrac = 1; // Janky sub-stepping
-
-const int LEAF_CAPACITY = 4;
+const int LEAF_CAPACITY = 16;
 const int THREAD_CAPACITY = 4096;
 
 const float MIN_NODE_SIZE = 1e-6f;
 
+double stepFrac = 1; // Janky sub-stepping
 
 
 
@@ -121,7 +116,7 @@ void quadTreeSim::buildTree() {
     tree[0] = Node();
     treeCold[0].cx = (maxX + minX) / 2.0f;
     treeCold[0].cy = (maxY + minY) / 2.0f;
-    tree[0].halfSize = max(abs(maxX - minX), abs(maxY - minY)) / 2.0f;
+    tree[0].size = max(abs(maxX - minX), abs(maxY - minY));
     tree[0].lo = 0;
     tree[0].hi = N;
     tree[0].next = -1;
@@ -160,7 +155,7 @@ void quadTreeSim::buildTree() {
                 localStack.push_back(node);
                 while (!localStack.empty()) {
                     int n = localStack.back(); localStack.pop_back();
-                    if (tree[n].hi - tree[n].lo <= LEAF_CAPACITY || tree[n].halfSize < MIN_NODE_SIZE) {
+                    if (tree[n].hi - tree[n].lo <= LEAF_CAPACITY || tree[n].size < MIN_NODE_SIZE) {
                         makeLeaf(n);
                         continue;
                     }
@@ -244,13 +239,12 @@ void quadTreeSim::reorderBodies() {
 
 void quadTreeSim::subdivide(int nInd) {
     int base = nodeCnt.fetch_add(4, std::memory_order_relaxed);
-    // assert(base + 4 <= (int)tree.size());
     tree[nInd].firstChild = base;
     for (int i = 0; i < 4; i++) {
         tree[base+i] = Node();
-        treeCold[base+i].cx = treeCold[nInd].cx + (tree[nInd].halfSize/2) * ((i & 1) ? 1 : -1);
-        treeCold[base+i].cy = treeCold[nInd].cy + (tree[nInd].halfSize/2) * ((i & 2) ? 1 : -1);
-        tree[base+i].halfSize = tree[nInd].halfSize / 2;
+        treeCold[base+i].cx = treeCold[nInd].cx + (tree[nInd].size/4) * ((i & 1) ? 1 : -1);
+        treeCold[base+i].cy = treeCold[nInd].cy + (tree[nInd].size/4) * ((i & 2) ? 1 : -1);
+        tree[base+i].size = tree[nInd].size / 2;
         tree[base+i].next = (i < 3) ? base + i + 1 : tree[nInd].next;
     }
 }
@@ -263,9 +257,9 @@ void quadTreeSim::computeMassDistribution() {
         float totMass = 0, weightSumX = 0, weightSumY = 0;
         for (int c = 0; c < 4; c++) {
             int child = tree[i].firstChild + c;
-            totMass     += tree[child].mass;
-            weightSumX  += tree[child].comx * tree[child].mass;
-            weightSumY  += tree[child].comy * tree[child].mass;
+            totMass += tree[child].mass;
+            weightSumX += tree[child].comx * tree[child].mass;
+            weightSumY += tree[child].comy * tree[child].mass;
         }
         tree[i].mass = totMass;
         tree[i].comx = totMass > 0 ? weightSumX / totMass : 0;
@@ -276,6 +270,7 @@ void quadTreeSim::computeMassDistribution() {
 
 void quadTreeSim::computeAccel(int bInd, float thetaIn, vector<float>& axOut, vector<float>& ayOut, bool DO_INFO, double* potEnergy) {
     float totAccX = 0.0f, totAccY = 0.0f;
+    float thetaInSq = sq(thetaIn);
     int nInd = 0;
     float flG = (float)G;
     float flGravEpsilon2 = (float)gravEpsilon2;
@@ -283,28 +278,24 @@ void quadTreeSim::computeAccel(int bInd, float thetaIn, vector<float>& axOut, ve
     float by = bodies.py[bInd];
 
     while (nInd != -1) {
-        const Node& node = tree[nInd];
+        Node node = tree[nInd];
 
         float rX = node.comx - bx;
         float rY = node.comy - by;
         float distSq = sq(rX) + sq(rY);
-        float s = node.halfSize * 2.0f;
+        float s = node.size;
 
-        bool isLeaf = (node.firstChild == -1);
-        bool macPasses = sq(s) < sq(thetaIn) * distSq;
-        bool selfInLeaf = isLeaf && bInd >= node.lo && bInd < node.hi;
-
-        if (macPasses && !selfInLeaf) {
+        if (sq(s) < thetaInSq * distSq) {
             float distSqSoft = distSq + flGravEpsilon2;
             float invDist = 1.0f / sqrt(distSqSoft);
             float accelMag = flG * node.mass * sq(invDist) * invDist;
             totAccX += accelMag * rX;
             totAccY += accelMag * rY;
-            if (DO_INFO && potEnergy) *potEnergy += -0.5 * G * node.mass * bodies.mass[bInd] * invDist;
+            // if (DO_INFO && potEnergy) *potEnergy += -0.5 * G * node.mass * bodies.mass[bInd] * invDist;
             nInd = node.next;
-        } else if (isLeaf) {
+
+        } else if (node.firstChild == -1) {
             for (int j = node.lo; j < node.hi; j++) {
-                if (j == bInd) continue;
                 float dX = bodies.px[j] - bx;
                 float dY = bodies.py[j] - by;
                 float dSq = sq(dX) + sq(dY) + flGravEpsilon2;
@@ -312,8 +303,8 @@ void quadTreeSim::computeAccel(int bInd, float thetaIn, vector<float>& axOut, ve
                 float accelMag = flG * bodies.mass[j] * sq(invDist) * invDist;
                 totAccX += accelMag * dX;
                 totAccY += accelMag * dY;
-                if (DO_INFO && potEnergy)
-                    *potEnergy += -0.5 * G * bodies.mass[j] * bodies.mass[bInd] * invDist;
+                // if (DO_INFO && potEnergy)
+                    // *potEnergy += -0.5 * G * bodies.mass[j] * bodies.mass[bInd] * invDist;
             }
             nInd = node.next;
         } else {

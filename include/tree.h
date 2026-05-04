@@ -1,6 +1,6 @@
 #pragma once
+#include <atomic>
 #include <vector>
-#include <Eigen/Dense>
 
 #include "bodies.h"
 #include "node.h"

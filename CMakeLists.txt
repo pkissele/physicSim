@@ -4,7 +4,7 @@ project(AstroSim LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE Release)
-
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Profiling
 option(PROFILE "Enable profiling flags" OFF)
@@ -64,5 +64,4 @@ target_link_libraries(runSim
 # Optimization flags
 target_compile_options(runSim PRIVATE -O3 -march=native -ffast-math -fopenmp)
 
-# Export
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
