@@ -9,7 +9,15 @@ class quadTreeSim {
     public:
         quadTreeSim(int N, double mass, double size, double viewW, double viewH);
 
+        void step(double dt, bool LOG_ENERGY, bool LOG_TIME);
+
+        void cullEscape(float maxRadius);
+
         void buildTree();
+
+        void compactArrays(const std::vector<uint8_t>& keep, int totalKeep);
+
+        void buildSubtree(int nInd);
 
         void partitionNode(int nInd);
 
@@ -17,17 +25,13 @@ class quadTreeSim {
 
         void reorderBodies();
 
-        void dfsReorder();
-
-        void step(double dt, bool LOG_ENERGY, bool LOG_TIME);
-
-        int getQuadrant(int bInd, int nInd);
-
         void subdivide(int nInd);
 
         void computeMassDistribution();
 
         void computeAccel(int bInd, float thetaIn, std::vector<float>& axOut, std::vector<float>& ayOut, bool DO_INFO, double* potEnergy);
+
+        void computeAccelSubtree(int nInd);
 
         Bodies& getBodies() { return bodies; }
 
@@ -45,4 +49,6 @@ class quadTreeSim {
         std::vector<NodeCold> treeCold;
 
         std::vector<int> buildIndices;
+
+        std::vector<float> bodyCost;
 };

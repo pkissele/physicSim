@@ -155,11 +155,11 @@ int main(int argc, char** argv) {
             }
             buffer = &state.buffers[ind];
 
-            uploadBuffer(pxVBO,   buffer->px.data(),   sizeof(float) * N);
-            uploadBuffer(pyVBO,   buffer->py.data(),   sizeof(float) * N);
-            uploadBuffer(vxVBO,   buffer->vx.data(),   sizeof(float) * N);
-            uploadBuffer(vyVBO,   buffer->vy.data(),   sizeof(float) * N);
-            uploadBuffer(sizeVBO, buffer->size.data(), sizeof(float) * N);
+            uploadBuffer(pxVBO,   buffer->px.data(),   sizeof(float) * buffer->N);
+            uploadBuffer(pyVBO,   buffer->py.data(),   sizeof(float) * buffer->N);
+            uploadBuffer(vxVBO,   buffer->vx.data(),   sizeof(float) * buffer->N);
+            uploadBuffer(vyVBO,   buffer->vy.data(),   sizeof(float) * buffer->N);
+            uploadBuffer(sizeVBO, buffer->size.data(), sizeof(float) * buffer->N);
         }
 
         // Draw background
@@ -173,7 +173,7 @@ int main(int argc, char** argv) {
         glUniform2f(displaySizeLoc, (float)displayW, (float)displayH);
         glUniform2f(displayOffsetLoc, (float)(displayX - 0.5f * (displayW - viewW)), (float)(displayY - 0.5f * (displayH - viewH)));
  
-        drawVAO(program, vao, GL_POINTS, N);
+        drawVAO(program, vao, GL_POINTS, buffer->N);
 
         // Put to screen
         glfwSwapBuffers(window);
@@ -234,9 +234,10 @@ void simulate(quadTreeSim& sim, globalState& shared, atomic<bool>& running, doub
         auto end = chrono::high_resolution_clock::now();
 
         double elapsed = chrono::duration<double, milli>(end - start).count();
-        if (LOG_SIM_TIME && step%LOG_SIM_TIME_INTERVAL==0) cout << "simulation step took "<< fixed << setprecision(2) << elapsed << " ms" << endl << endl;
+        if (LOG_SIM_TIME && step%LOG_SIM_TIME_INTERVAL==0) cout << "simulation step took "<< fixed << setprecision(2) << elapsed << " ms" << endl;
 
         Bodies& bodies = sim.getBodies();
+        if (LOG_SIM_TIME && step%LOG_SIM_TIME_INTERVAL==0) cout << "bodies: " << bodies.N << endl << endl; 
 
         int writeInd = 1 - shared.readInd.load();
 
@@ -253,6 +254,7 @@ void simulate(quadTreeSim& sim, globalState& shared, atomic<bool>& running, doub
 
 
 void updateBuffer(globalState& shared, int ind, Bodies& bodies) {
+    shared.buffers[ind].N = bodies.N;
     shared.buffers[ind].px = bodies.px;
     shared.buffers[ind].py = bodies.py;
     shared.buffers[ind].vx = bodies.vx;
