@@ -10,6 +10,8 @@ namespace Consts {
     // Physical constants
     //
     constexpr float G = 1;
+    constexpr float kB = 1;
+    constexpr float adiaGamma = 1.4;
 
 
     //
@@ -27,5 +29,7 @@ namespace Consts {
     constexpr int BUILD_TASK_SIZE = 4096;
     constexpr int ACCEL_TASK_SIZE = 2048;
 
-    const float MIN_NODE_SIZE = 1e-6f;
+    constexpr float MIN_NODE_SIZE = 1e-6f;
+
+    constexpr float INIT_TEMP = 1;
 }

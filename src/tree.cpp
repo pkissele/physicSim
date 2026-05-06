@@ -24,6 +24,7 @@ using namespace std;
 void quadTreeSim::step(double dt, bool LOG_ENERGY, bool LOG_TIME) {
     // double kinEnergy = 0, potEnergy = 0;
 
+
     // half-step velocity (kick)
     for (int i = 0; i < N; i++) {
         bodies.vx[i] += 0.5f * bodies.ax[i] * dt;
@@ -48,6 +49,10 @@ void quadTreeSim::step(double dt, bool LOG_ENERGY, bool LOG_TIME) {
         }
     }
 
+    for (int i = 0; i < N; i++) {
+        findDensity(i);
+    }
+
     // half-step velocity (kick)
     for (int i = 0; i < N; i++) {
         bodies.vx[i] += 0.5f * bodies.axNew[i] * dt;
@@ -64,6 +69,29 @@ void quadTreeSim::step(double dt, bool LOG_ENERGY, bool LOG_TIME) {
     // }
     swap(bodies.ax, bodies.axNew);
     swap(bodies.ay, bodies.ayNew);
+}
+
+
+inline float gauss1D(float x, float mu, float sigma) {
+    float dx = x - mu;
+    float invTwoSigmaSq = 0.5f / (sigma * sigma);
+    float norm = 1.0f / (sigma * std::sqrt(2.0f * M_PI));
+    return norm * std::expf(-dx * dx * invTwoSigmaSq);
+}
+
+
+void quadTreeSim::findDensity(int bInd) {
+    int nInd = bodyToLeaf[bInd];
+    vector<float> vals;
+    for (int i = tree[nInd].lo; i < tree[nInd].hi; i++) {
+        float len = sqrtf(sq(bodies.px[bInd]) + sq(bodies.py[bInd]));
+        vals.push_back(gauss1D(len, 0, 1));
+    }
+    float vSum = std::accumulate(vals.begin(), vals.end(), 0);
+    for(int i = 0; i < vals.size(); i++) {
+        vals[i] = vals[i] / vSum;
+    }
+    
 }
 
 
@@ -174,6 +202,16 @@ void quadTreeSim::buildTree() {
         buildSubtree(0);
     }
     reorderBodies();
+
+    bodyToLeaf.resize(N);
+    for (int n = 0; n < nodeCnt; n++) {
+        if (tree[n].firstChild == -1) {
+            for (int i = tree[n].lo; i < tree[n].hi; i++) {
+                bodyToLeaf[i] = n;
+            }
+        }
+    }
+
     computeMassDistribution();
 }
 
@@ -337,10 +375,12 @@ quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double
     buildIndices.resize(N);
     std::iota(buildIndices.begin(), buildIndices.end(), 0);
 
+
     // Base body fill
     for(int i = 0; i < N; i++) {
         bodies.mass[i] = mass;
         bodies.size[i] = size;
+        bodies.energy[i] = kB * INIT_TEMP / ((adiaGamma - 1) * mass);
     }
 
     // Disk settings

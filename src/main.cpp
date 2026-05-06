@@ -47,8 +47,10 @@ const bool LOG_ENERGY = false;
 const int LOG_ENERGY_INTERVAL = 1;
 
 // Simulation parameters
-const int N = 1000000;
-const double mass = 0.00005;
+// const int N = 1000000;
+const int N = 100;
+// const double mass = 0.00005;
+const double mass = 0.05;
 const double bodySize = 5;
 const int FPS_TARGET = 30;
 

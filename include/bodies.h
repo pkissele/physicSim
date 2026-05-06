@@ -16,6 +16,12 @@ struct Bodies {
     std::vector<float> axNew;
     std::vector<float> ayNew;
 
+
+    std::vector<float> press;
+    std::vector<float> dens;
+    std::vector<float> energy;
+
+
     Bodies(int nVal) : N(nVal){
         mass.resize(N, 0.0f);
         size.resize(N, 0.0f);
@@ -28,5 +34,9 @@ struct Bodies {
         ay.resize(N, 0.0f);
         axNew.resize(N, 0.0f);
         ayNew.resize(N, 0.0f);
+
+        press.resize(N, 0.0f);
+        dens.resize(N, 0.0f);
+        energy.resize(N, 0.0f);
     }
 };

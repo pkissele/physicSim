@@ -11,15 +11,23 @@ class quadTreeSim {
 
         void step(double dt, bool LOG_ENERGY, bool LOG_TIME);
 
-        void cullEscape(float maxRadius);
+        void findDensity(int bInd);
+
+        void queryRange(int queryIdx, float radius, std::vector<int>& results);
+
+        void computeAccelSubtree(int nInd);
+
+        void computeAccel(int bInd, float thetaIn, std::vector<float>& axOut, std::vector<float>& ayOut, bool DO_INFO, double* potEnergy);
 
         void buildTree();
-
-        void compactArrays(const std::vector<uint8_t>& keep, int totalKeep);
 
         void buildSubtree(int nInd);
 
         void partitionNode(int nInd);
+
+        void cullEscape(float maxRadius);
+
+        void compactArrays(const std::vector<uint8_t>& keep, int totalKeep);
 
         void makeLeaf(int nInd);
 
@@ -29,9 +37,6 @@ class quadTreeSim {
 
         void computeMassDistribution();
 
-        void computeAccel(int bInd, float thetaIn, std::vector<float>& axOut, std::vector<float>& ayOut, bool DO_INFO, double* potEnergy);
-
-        void computeAccelSubtree(int nInd);
 
         Bodies& getBodies() { return bodies; }
 
@@ -51,4 +56,5 @@ class quadTreeSim {
         std::vector<int> buildIndices;
 
         std::vector<float> bodyCost;
+        std::vector<int> bodyToLeaf;
 };
