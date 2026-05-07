@@ -39,4 +39,8 @@ struct Bodies {
         dens.resize(N, 0.0f);
         energy.resize(N, 0.0f);
     }
+
+    std::vector<std::vector<float>*> arrays() {
+        return {&mass, &size, &px, &py, &vx, &vy, &ax, &ay, &axNew, &ayNew, &press, &dens, &energy};
+    }
 };

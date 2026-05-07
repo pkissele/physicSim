@@ -17,10 +17,18 @@ namespace Consts {
     //
     // Simulation constants
     //
+
+    // const int N = 1000000;
+    constexpr int N = 10000;
+    // const double mass = 0.00005;
+    constexpr double mass = 0.0005;
+    constexpr double bodySize = 5;
+
     constexpr float theta = 0.7;
     constexpr float init_theta = 0.4; // more accurate initialization
 
-    constexpr float gravEpsilon = 0.05;
+    // constexpr float gravEpsilon = 0.05;
+    constexpr float gravEpsilon = 0.5;
     constexpr float gravEpsilonSq = gravEpsilon*gravEpsilon;
 
     constexpr float ESCAPE_CULL_RAD = 8.0f;
@@ -32,4 +40,31 @@ namespace Consts {
     constexpr float MIN_NODE_SIZE = 1e-6f;
 
     constexpr float INIT_TEMP = 1;
+
+    //
+    // Engine constants
+    //
+    constexpr int FPS_TARGET = 30;
+    constexpr double FRAME_TARGET = 1000.0/FPS_TARGET;
+
+
+    // view
+    constexpr double viewW = 30.0;
+    constexpr double viewH = 30.0;
+
+    // window parameters
+    constexpr int screenW = 1000;
+    constexpr int screenH = 1000;
+
+    // basic logging
+    constexpr bool LOG_GUI_TIME = false; 
+    constexpr int LOG_GUI_TIME_INTERVAL = 30;
+    constexpr bool LOG_SIM_TIME = true;
+    constexpr int LOG_SIM_TIME_INTERVAL = 5;
+    constexpr bool LOG_ENERGY = false; 
+    constexpr int LOG_ENERGY_INTERVAL = 1;
+
+    constexpr int MASS_DISPLAY_THRESHOLD = 5;
+    // constexpr float VISIBILITY = 0.02;
+    constexpr float VISIBILITY = 1;
 }

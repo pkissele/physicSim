@@ -18,13 +18,13 @@
 #include "tree.h"
 #include "gl_utils.h"
 
+#include "consts.h"
+
 
 using namespace std;
+using namespace Consts;
 
 
-// view
-const double viewW = 30.0;
-const double viewH = 30.0;
 
 // Current display scaling
 double displayW = viewW;
@@ -33,27 +33,6 @@ double displayH = viewH;
 // Current display shift
 double displayX = 0;
 double displayY = 0;
-
-// window parameters
-const int screenW = 1000;
-const int screenH = 1000;
-
-// basic logging
-const bool LOG_GUI_TIME = false; 
-const int LOG_GUI_TIME_INTERVAL = 30;
-const bool LOG_SIM_TIME = true;
-const int LOG_SIM_TIME_INTERVAL = 5;
-const bool LOG_ENERGY = false; 
-const int LOG_ENERGY_INTERVAL = 1;
-
-// Simulation parameters
-// const int N = 1000000;
-const int N = 100;
-// const double mass = 0.00005;
-const double mass = 0.05;
-const double bodySize = 5;
-const int FPS_TARGET = 30;
-
 
 
 int main(int argc, char** argv) {
@@ -72,6 +51,7 @@ int main(int argc, char** argv) {
     GLuint vxVBO   = attachVBO(2, 1, N);
     GLuint vyVBO   = attachVBO(3, 1, N);
     GLuint sizeVBO = attachVBO(4, 1, N);
+    GLuint densVBO = attachVBO(5, 1, N);
 
 
     // Unbind VAO (important to prevent overwriting) and VBO
@@ -103,7 +83,6 @@ int main(int argc, char** argv) {
 
     // Runtime variables
     double dt = (double)1/FPS_TARGET;
-    const double FRAME_TARGET = 1000.0/FPS_TARGET;
     int frame_idx = 0;
     double lastTime = glfwGetTime();
     int lastSavedFrame = -1;
@@ -126,10 +105,12 @@ int main(int argc, char** argv) {
     thread simThread(simulate, ref(sim), ref(state), ref(running), dt, LOG_ENERGY, LOG_SIM_TIME);
 
 
-    // get uniform
-    GLint colorLoc = glGetUniformLocation(program, "color");
-    GLint displaySizeLoc = glGetUniformLocation(program, "displaySize");
-    GLint displayOffsetLoc = glGetUniformLocation(program, "displayOffset");
+    GLint colorLoc          = glGetUniformLocation(program,         "color");
+    GLint displaySizeLoc    = glGetUniformLocation(program,   "displaySize");
+    GLint displayOffsetLoc  = glGetUniformLocation(program, "displayOffset");
+    GLint massThresholdLoc  = glGetUniformLocation(program, "massThreshold");
+    GLint visibilityLoc     = glGetUniformLocation(program,    "visibility");
+
 
     const Buffer* buffer = &state.buffers[0];
 
@@ -162,6 +143,7 @@ int main(int argc, char** argv) {
             uploadBuffer(vxVBO,   buffer->vx.data(),   sizeof(float) * buffer->N);
             uploadBuffer(vyVBO,   buffer->vy.data(),   sizeof(float) * buffer->N);
             uploadBuffer(sizeVBO, buffer->size.data(), sizeof(float) * buffer->N);
+            uploadBuffer(densVBO, buffer->dens.data(), sizeof(float) * buffer->N);
         }
 
         // Draw background
@@ -174,6 +156,8 @@ int main(int argc, char** argv) {
         glUniform3f(colorLoc, 1.0f, 1.0f, 1.0f);
         glUniform2f(displaySizeLoc, (float)displayW, (float)displayH);
         glUniform2f(displayOffsetLoc, (float)(displayX - 0.5f * (displayW - viewW)), (float)(displayY - 0.5f * (displayH - viewH)));
+        glUniform1f(massThresholdLoc, (float)MASS_DISPLAY_THRESHOLD);
+        glUniform1f(visibilityLoc, (float)VISIBILITY);
  
         drawVAO(program, vao, GL_POINTS, buffer->N);
 
@@ -207,6 +191,7 @@ int main(int argc, char** argv) {
     running = false;
     simThread.join();
 
+    glDeleteBuffers(1, &densVBO);
     glDeleteBuffers(1, &sizeVBO);
     glDeleteBuffers(1, &vyVBO);
     glDeleteBuffers(1, &vxVBO);
@@ -262,6 +247,18 @@ void updateBuffer(globalState& shared, int ind, Bodies& bodies) {
     shared.buffers[ind].vx = bodies.vx;
     shared.buffers[ind].vy = bodies.vy;
     shared.buffers[ind].size = bodies.size;
+    // shared.buffers[ind].dens = bodies.dens;
+
+    int n = bodies.N;
+    vector<float> sorted(bodies.dens.begin(), bodies.dens.begin() + n);
+    std::sort(sorted.begin(), sorted.end());
+
+    float minDens = sorted[(int)(n * 0.02f)];
+    float maxDens = sorted[(int)(n * 0.98f)];
+    float range = maxDens - minDens;
+
+    for (int i = 0; i < n; i++)
+        shared.buffers[ind].dens[i] = range > 0 ? std::clamp((bodies.dens[i] - minDens) / range, 0.0f, 1.0f) : 0.0f;
 }
 
 

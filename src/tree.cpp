@@ -1,6 +1,7 @@
 #include "tree.h"
 
 #include <cassert>
+#include <numeric>
 #include <random>
 #include <vector>
 #include <cmath>
@@ -8,13 +9,15 @@
 #include <algorithm>
 #include <execution>
 
+#include <Eigen/Dense>
+
 #include "utils.h"
 #include "bodies.h"
-#include "consts.h"
 #include "node.h"
 #include "timer.h"
 
-#include <Eigen/Dense>
+#include "consts.h"
+
 
 using namespace Consts;
 using namespace std;
@@ -23,7 +26,6 @@ using namespace std;
 
 void quadTreeSim::step(double dt, bool LOG_ENERGY, bool LOG_TIME) {
     // double kinEnergy = 0, potEnergy = 0;
-
 
     // half-step velocity (kick)
     for (int i = 0; i < N; i++) {
@@ -82,16 +84,23 @@ inline float gauss1D(float x, float mu, float sigma) {
 
 void quadTreeSim::findDensity(int bInd) {
     int nInd = bodyToLeaf[bInd];
+    if(tree[nInd].hi - tree[nInd].lo < 2) { bodies.dens[bInd] = 0; return; }
+
+    float bX = bodies.px[bInd], bY = bodies.py[bInd];
+
     vector<float> vals;
     for (int i = tree[nInd].lo; i < tree[nInd].hi; i++) {
-        float len = sqrtf(sq(bodies.px[bInd]) + sq(bodies.py[bInd]));
-        vals.push_back(gauss1D(len, 0, 1));
+        float len = sqrtf(sq(bX - bodies.px[i]) + sq(bY - bodies.py[i]));
+        vals.push_back(gauss1D(len, 0.0f, (float)tree[nInd].size/4.0f));
+        // cout << vals[vals.size()-1] << endl;
     }
-    float vSum = std::accumulate(vals.begin(), vals.end(), 0);
+    float vSum = std::accumulate(vals.begin(), vals.end(), 0.0f);
+    float densAccum = 0;
     for(int i = 0; i < vals.size(); i++) {
-        vals[i] = vals[i] / vSum;
+        densAccum += bodies.mass[tree[nInd].lo+i] * vals[i];
     }
-    
+    bodies.dens[bInd] = densAccum;
+    // cout << densAccum << endl;
 }
 
 
@@ -235,10 +244,7 @@ void quadTreeSim::compactArrays(const std::vector<uint8_t>& keep, int totalKeep)
         std::swap(arr, tmp);
     };
 
-    for (auto* arr : {
-        &bodies.px, &bodies.py, &bodies.vx, &bodies.vy, &bodies.ax, &bodies.ay, 
-        &bodies.axNew, &bodies.ayNew, &bodies.mass, &bodies.size
-    }) {
+    for (auto* arr : bodies.arrays()) { 
         compact(*arr);
     }
     N = totalKeep;
@@ -321,10 +327,8 @@ void quadTreeSim::reorderBodies() {
         std::swap(arr, tmp);
     };
 
-    for(auto* arr : {
-        &bodies.px, &bodies.py, &bodies.vx, &bodies.vy, &bodies.ax, &bodies.ay,
-        &bodies.axNew, &bodies.ayNew, &bodies.mass, &bodies.size,
-    }) {
+
+    for (auto* arr : bodies.arrays()) { 
         reorderArray(*arr);
     }
     std::iota(buildIndices.begin(), buildIndices.end(), 0);

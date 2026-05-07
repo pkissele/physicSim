@@ -17,12 +17,14 @@ struct Buffer {
     std::vector<float> px, py;
     std::vector<float> vx, vy;
     std::vector<float> size;
+    std::vector<float> dens;
 
     Buffer() = default;
     Buffer(int n) : N(n) {
         px.resize(n);
         py.resize(n);
         size.resize(n);
+        dens.resize(n);
     }
 };
 

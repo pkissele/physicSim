@@ -5,6 +5,7 @@ layout(location = 1) in float py;
 layout(location = 2) in float vx;
 layout(location = 3) in float vy;
 layout(location = 4) in float in_size;
+layout(location = 5) in float dens;
 
 
 // uniform float pointSize;
@@ -13,6 +14,7 @@ uniform vec2 displayOffset;
 
 out float vSpeed;
 out float vSize;
+out float vDens; 
 
 void main() {
     vec2 in_pos = vec2(px, py);
@@ -25,4 +27,5 @@ void main() {
     vec2 in_vel = vec2(vx, vy);
     vSpeed = length(in_vel);
     vSize = in_size;
+    vDens = dens;
 }
