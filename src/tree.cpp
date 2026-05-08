@@ -8,6 +8,7 @@
 #include <iostream>
 #include <algorithm>
 #include <execution>
+#include <unordered_set>
 
 #include <Eigen/Dense>
 
@@ -24,7 +25,7 @@ using namespace std;
 
 
 
-void quadTreeSim::step(double dt, bool LOG_ENERGY, bool LOG_TIME) {
+void quadTreeSim::step(double dt, int curStep, bool LOG_ENERGY, bool LOG_TIME) {
     // double kinEnergy = 0, potEnergy = 0;
 
     // half-step velocity (kick)
@@ -56,6 +57,8 @@ void quadTreeSim::step(double dt, bool LOG_ENERGY, bool LOG_TIME) {
             computeAccelSubtree(0);
         }
     }
+    instabilities.clear();
+    usedNbrs.clear();
     {
         ScopedTimer t("density solve", LOG_TIME);
         for (int i = 0; i < N; i++) {
@@ -68,6 +71,16 @@ void quadTreeSim::step(double dt, bool LOG_ENERGY, bool LOG_TIME) {
             computePressureAccel(i);
         }
     }
+
+    if (curStep > 100) {
+        for(int i = 0; i < instabilities.size(); i++) {
+            int starInd = instabilities[i];
+            if(usedNbrs.find(starInd) == usedNbrs.end()) {
+                formStar(starInd);
+            }
+        }
+    }
+
 
     // half-step velocity (kick)
     for (int i = 0; i < N; i++) {
@@ -188,7 +201,16 @@ void quadTreeSim::computePressureAccel(int bInd) {
 
     float fX = 0.0f, fY = 0.0f;
 
+    float densCritical = PI * DENS_TO_PRESS;
+    bool passJeans = true;
+    // cout << densCritical << endl;
+    // cout << neighbors[bInd].size() << endl;
+
     for (int j : neighbors[bInd]) {
+        if(bodies.dens[j] < densCritical) {
+            // cout << bodies.dens[j] << endl;
+            passJeans = false;
+        }
         float dx = bodies.px[j] - bX;
         float dy = bodies.py[j] - bY;
         float d2 = sq(dx) + sq(dy);
@@ -210,11 +232,28 @@ void quadTreeSim::computePressureAccel(int bInd) {
         fX += coeff * dx;
         fY += coeff * dy;
     }
+    if(passJeans) {
+        instabilities.push_back(bInd);
+    }
 
     if (rhoI > 1e-8f) {
         bodies.axNew[bInd] += -fX;
         bodies.ayNew[bInd] += -fY;
     }
+}
+
+void quadTreeSim::formStar(int bInd) {
+    float massAccum = 0;
+    for (int j : neighbors[bInd]) {
+        usedNbrs.insert(j);
+        bodies.mass[j] = bodies.mass[j] / 2.0f;
+        massAccum += bodies.mass[j];
+    }
+
+    bodies.size[bInd] *= 5;
+    bodies.mass[bInd] += massAccum;
+    bodies.diffuse[bInd] = 0;
+    cout << "Spawned star" << endl;
 }
 
 
@@ -511,14 +550,14 @@ quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double
     randDisk(bodies, diskScale, 0.3);
 
     // Create massive central body
-    bodies.mass[0] = 20;
+    bodies.mass[0] = 0.5;
     bodies.size[0] = 10 * size;
     bodies.px[0] = 0.0f;
     bodies.py[0] = 0.0f;
     bodies.diffuse[0] = 0;
 
     for (int i = 1; i < 7; i++) {
-        bodies.mass[i] = 0.1;
+        bodies.mass[i] = 0.5;
         bodies.size[i] = 5 * size;
         bodies.diffuse[i] = 0;
     }

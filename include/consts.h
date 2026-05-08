@@ -12,14 +12,15 @@ namespace Consts {
     constexpr float G = 1;
     constexpr float kB = 1;
     constexpr float adiaGamma = 1.4;
+    constexpr float PI = 3.1415926;
 
 
     //
     // Simulation constants
     //
 
-    constexpr int N = 100000;
-    constexpr double mass = 0.000005;
+    constexpr int N = 10000;
+    constexpr double mass = 0.0005;
     constexpr double bodySize = 5;
 
     constexpr float theta = 0.7;
@@ -38,7 +39,7 @@ namespace Consts {
 
     constexpr float INIT_TEMP = 1;
     constexpr float NEIGHBOR_SKIN = 0.3f;
-    constexpr float DENS_TO_PRESS = 0.07f; // manually tuned value, to be fixed
+    constexpr float DENS_TO_PRESS = 0.006f;
 
 
     //
@@ -59,11 +60,11 @@ namespace Consts {
     // basic logging
     constexpr bool LOG_GUI_TIME = false; 
     constexpr int LOG_GUI_TIME_INTERVAL = 30;
-    constexpr bool LOG_SIM_TIME = true;
+    constexpr bool LOG_SIM_TIME = false;
     constexpr int LOG_SIM_TIME_INTERVAL = 5;
     constexpr bool LOG_ENERGY = false; 
     constexpr int LOG_ENERGY_INTERVAL = 1;
 
     constexpr int MASS_DISPLAY_THRESHOLD = 5;
-    constexpr float VISIBILITY = 0.1;
+    constexpr float VISIBILITY = 1;
 }

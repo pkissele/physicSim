@@ -1,6 +1,7 @@
 #pragma once
 #include <atomic>
 #include <vector>
+#include <unordered_set>
 
 #include "bodies.h"
 #include "node.h"
@@ -9,12 +10,13 @@ class quadTreeSim {
     public:
         quadTreeSim(int N, double mass, double size, double viewW, double viewH);
 
-        void step(double dt, bool LOG_ENERGY, bool LOG_TIME);
+        void step(double dt, int curStep, bool LOG_ENERGY, bool LOG_TIME);
 
         void findDensity(int bInd);
-        void findDensity2(int bInd);
 
         void computePressureAccel(int bInd);
+
+        void formStar(int bInd);
 
         void buildNeighborList();
 
@@ -66,4 +68,6 @@ class quadTreeSim {
         std::vector<std::vector<int>> neighbors;
         std::vector<float> pxAtBuild, pyAtBuild;
         bool neighborsDirty = true;
+        std::vector<int> instabilities;
+        std::unordered_set<int> usedNbrs;
 };

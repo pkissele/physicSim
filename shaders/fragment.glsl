@@ -34,9 +34,13 @@ void main() {
         color = mix(vec3(1.0,1.0,0.0), vec3(1.0,0.0,0.0), tt);
     }
 
-    if(isBig) {
-        fragColor = vec4(color, 1);
+    if(passIndex == 0) {
+        if(isBig) {
+            fragColor = vec4(color, 1);
+        } else {
+            fragColor = vec4(color, visibility);
+        }
     } else {
-        fragColor = vec4(color, visibility);
+        fragColor = vec4(vec3(0, 1.0, 0), 1);
     }
 }
