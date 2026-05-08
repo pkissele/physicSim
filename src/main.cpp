@@ -105,14 +105,16 @@ int main(int argc, char** argv) {
     thread simThread(simulate, ref(sim), ref(state), ref(running), dt, LOG_ENERGY, LOG_SIM_TIME);
 
 
+
     GLint colorLoc          = glGetUniformLocation(program,         "color");
     GLint displaySizeLoc    = glGetUniformLocation(program,   "displaySize");
     GLint displayOffsetLoc  = glGetUniformLocation(program, "displayOffset");
     GLint massThresholdLoc  = glGetUniformLocation(program, "massThreshold");
     GLint visibilityLoc     = glGetUniformLocation(program,    "visibility");
-
+    GLint passLoc           = glGetUniformLocation(program,     "passIndex");
 
     const Buffer* buffer = &state.buffers[0];
+
 
     cout << "Starting main loop (press ESC to quit, S to toggle saving, SPACE to pause/resume, P to save single frame)" << endl;
     int displayFrame = 1;
@@ -158,7 +160,11 @@ int main(int argc, char** argv) {
         glUniform2f(displayOffsetLoc, (float)(displayX - 0.5f * (displayW - viewW)), (float)(displayY - 0.5f * (displayH - viewH)));
         glUniform1f(massThresholdLoc, (float)MASS_DISPLAY_THRESHOLD);
         glUniform1f(visibilityLoc, (float)VISIBILITY);
- 
+
+        glUniform1i(passLoc, 0);
+        drawVAONoBind(program, vao, GL_POINTS, buffer->N);
+
+        glUniform1i(passLoc, 1);
         drawVAO(program, vao, GL_POINTS, buffer->N);
 
         // Put to screen

@@ -12,8 +12,13 @@ class quadTreeSim {
         void step(double dt, bool LOG_ENERGY, bool LOG_TIME);
 
         void findDensity(int bInd);
+        void findDensity2(int bInd);
 
-        void queryRange(int queryIdx, float radius, std::vector<int>& results);
+        void computePressureAccel(int bInd);
+
+        void buildNeighborList();
+
+        bool neighborsNeedRebuild();
 
         void computeAccelSubtree(int nInd);
 
@@ -57,4 +62,8 @@ class quadTreeSim {
 
         std::vector<float> bodyCost;
         std::vector<int> bodyToLeaf;
+
+        std::vector<std::vector<int>> neighbors;
+        std::vector<float> pxAtBuild, pyAtBuild;
+        bool neighborsDirty = true;
 };

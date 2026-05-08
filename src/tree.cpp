@@ -42,17 +42,31 @@ void quadTreeSim::step(double dt, bool LOG_ENERGY, bool LOG_TIME) {
         ScopedTimer t("build tree", LOG_TIME);
         buildTree();
     }
+
+    if (neighborsDirty || neighborsNeedRebuild()){
+        ScopedTimer t("neighbor build", LOG_TIME);
+        buildNeighborList();
+    }
+
     {
-        ScopedTimer t("accel step", LOG_TIME);
+        ScopedTimer t("gravity accel step", LOG_TIME);
         #pragma omp parallel
         {
             #pragma omp single nowait
             computeAccelSubtree(0);
         }
     }
-
-    for (int i = 0; i < N; i++) {
-        findDensity(i);
+    {
+        ScopedTimer t("density solve", LOG_TIME);
+        for (int i = 0; i < N; i++) {
+            findDensity(i);
+        }
+    }
+    {
+        ScopedTimer t("pressure accel step", LOG_TIME);
+        for (int i = 0; i < N; i++) {
+            computePressureAccel(i);
+        }
     }
 
     // half-step velocity (kick)
@@ -74,57 +88,133 @@ void quadTreeSim::step(double dt, bool LOG_ENERGY, bool LOG_TIME) {
 }
 
 
-void quadTreeSim::findDensity(int bInd) {
-    int leafInd = bodyToLeaf[bInd];
-    // Use containing leaf's size as a proxy for h
-    // Kernel compact support is 2h, so this gives support ≈ leaf side length
-    float h = tree[leafInd].size * 0.5f;
-    if (h < 1e-8f) { bodies.dens[bInd] = 0.0f; return; }
-    if (bodies.diffuse[bInd] == 0) { bodies.dens[bInd] = 0.0f; return; } 
+inline float wendlandC2(float q, float kernelNorm) {
+    float t = 1.0f - 0.5f * q;
+    float t2 = t * t;
+    return kernelNorm * t2 * t2 * (1.0f + 2.0f * q);
+}
 
-    float invH = 1.0f / h;
-    float invH2 = invH * invH;
-    float kernelNorm = (7.0f / (4.0f * (float)M_PI)) * invH2;  // 2D Wendland C2 norm
-    float searchR2 = sq(2.0f * h);
 
-    float bX = bodies.px[bInd];
-    float bY = bodies.py[bInd];
-    float densAccum = 0.0f;
+void quadTreeSim::buildNeighborList() {
+    neighbors.resize(N);
+    #pragma omp parallel for
+    for (int i = 0; i < N; i++) {
+        neighbors[i].clear();
+        if (bodies.diffuse[i] == 0) continue;
 
-    // Range query: walk tree, summing kernel contributions within 2h
-    int nInd = 0;
-    while (nInd != -1) {
-        const Node& node = tree[nInd];
-        float cx = treeCold[nInd].cx;
-        float cy = treeCold[nInd].cy;
-        float halfSize = node.size * 0.5f;
-        float dxN = std::max(0.0f, std::abs(bX - cx) - halfSize);
-        float dyN = std::max(0.0f, std::abs(bY - cy) - halfSize);
-        float minDist2 = sq(dxN) + sq(dyN);
+        int leafInd = bodyToLeaf[i];
+        float h = tree[leafInd].size * 0.5f;
+        float skinR2 = sq((2.0f + NEIGHBOR_SKIN) * h);
+        float bX = bodies.px[i], bY = bodies.py[i];
 
-        if (minDist2 > searchR2) {
-            nInd = node.next;  // entire subtree outside support — skip
-        } else if (node.firstChild == -1) {
-            for (int j = node.lo; j < node.hi; j++) {
-                float dx = bodies.px[j] - bX;
-                float dy = bodies.py[j] - bY;
-                float d2 = sq(dx) + sq(dy);
-                if (d2 < searchR2) {
-                    if (bodies.diffuse[j] == 0) continue; 
-                    float q = std::sqrt(d2) * invH;
-                    float t = 1.0f - 0.5f * q;          // (1 - q/2)
-                    float t2 = t * t;
-                    float W = kernelNorm * t2 * t2 * (1.0f + 2.0f * q);
-                    densAccum += bodies.mass[j] * W;
-                }
+        int nInd = 0;
+        while (nInd != -1) {
+            const Node& node = tree[nInd];
+            float halfSize = node.size * 0.5f;
+            float dxN = std::max(0.0f, std::abs(bX - treeCold[nInd].cx) - halfSize);
+            float dyN = std::max(0.0f, std::abs(bY - treeCold[nInd].cy) - halfSize);
+            if (sq(dxN) + sq(dyN) > skinR2) { nInd = node.next; continue; }
+            if (node.firstChild == -1) {
+                for (int j = node.lo; j < node.hi; j++)
+                    if (bodies.diffuse[j] && sq(bodies.px[j]-bX) + sq(bodies.py[j]-bY) < skinR2)
+                        neighbors[i].push_back(j);
+                nInd = node.next;
+            } else {
+                nInd = node.firstChild;
             }
-            nInd = node.next;
-        } else {
-            nInd = node.firstChild;  // descend
         }
     }
 
+    pxAtBuild.assign(bodies.px.begin(), bodies.px.begin() + N);
+    pyAtBuild.assign(bodies.py.begin(), bodies.py.begin() + N);
+    neighborsDirty = false;
+}
+
+
+bool quadTreeSim::neighborsNeedRebuild() {
+    float maxD2 = 0.0f;
+    for (int i = 0; i < N; i++) {
+        maxD2 = std::max(maxD2, sq(bodies.px[i] - pxAtBuild[i]) + sq(bodies.py[i] - pyAtBuild[i]));
+    }
+    float h0 = tree[bodyToLeaf[0]].size * 0.5f;
+    return maxD2 > sq(NEIGHBOR_SKIN * h0 * 0.5f);
+}
+
+
+void quadTreeSim::findDensity(int bInd) {
+    if (bodies.diffuse[bInd] == 0) { bodies.dens[bInd] = 0.0f; return; }
+    int leafInd = bodyToLeaf[bInd];
+    float h = tree[leafInd].size * 0.5f;
+    if (h < 1e-8f) { bodies.dens[bInd] = 0.0f; return; }
+
+    float invH = 1.0f / h;
+    float invH2 = invH * invH;
+    float kernelNorm = (7.0f / (4.0f * (float)M_PI)) * invH2;
+    float searchR2 = sq(2.0f * h);
+    float bX = bodies.px[bInd], bY = bodies.py[bInd];
+    float densAccum = 0.0f;
+
+    for (int j : neighbors[bInd]) {
+        float dx = bodies.px[j] - bX;
+        float dy = bodies.py[j] - bY;
+        float d2 = sq(dx) + sq(dy);
+        if (d2 < searchR2) {
+            float q = std::sqrt(d2) * invH;
+            float t = 1.0f - 0.5f * q;
+            float t2 = t * t;
+            densAccum += bodies.mass[j] * kernelNorm * t2 * t2 * (1.0f + 2.0f * q);
+        }
+    }
     bodies.dens[bInd] = densAccum;
+}
+
+
+void quadTreeSim::computePressureAccel(int bInd) {
+    if (bodies.diffuse[bInd] == 0) return;
+
+    float h = tree[bodyToLeaf[bInd]].size * 0.5f;
+    if (h < 1e-8f) return;
+
+    float invH = 1.0f / h;
+    float searchR2 = sq(2.0f * h);
+    float gradNorm = (-35.0f / (4.0f * (float)M_PI)) * invH * invH * invH;
+
+    float bX = bodies.px[bInd], bY = bodies.py[bInd];
+    float rhoI = bodies.dens[bInd];
+
+    float Pi = DENS_TO_PRESS * rhoI;
+
+    float termI = Pi / sq(rhoI);
+
+    float fX = 0.0f, fY = 0.0f;
+
+    for (int j : neighbors[bInd]) {
+        float dx = bodies.px[j] - bX;
+        float dy = bodies.py[j] - bY;
+        float d2 = sq(dx) + sq(dy);
+
+        if (d2 >= searchR2 || d2 < 1e-16f) continue;
+
+        float rhoJ = bodies.dens[j];
+        float Pj = DENS_TO_PRESS * rhoJ;
+        float termJ = Pj / sq(rhoJ);
+
+        float r = sqrt(d2);
+        float q = r * invH;
+        float t = 1.0f - 0.5f * q;
+
+        float dWdr = gradNorm * q * t * t * t;
+        float invR = 1.0f / r;
+
+        float coeff = -bodies.mass[j] * (termI + termJ) * dWdr * invR;
+        fX += coeff * dx;
+        fY += coeff * dy;
+    }
+
+    if (rhoI > 1e-8f) {
+        bodies.axNew[bInd] += -fX;
+        bodies.ayNew[bInd] += -fY;
+    }
 }
 
 
@@ -210,10 +300,10 @@ void quadTreeSim::buildTree() {
         keep[i] = k;
         totalKeep += k;
         if (k) {
-            minX = std::min(minX, px);
-            maxX = std::max(maxX, px);
-            minY = std::min(minY, py);
-            maxY = std::max(maxY, py);
+            minX = min(minX, px);
+            maxX = max(maxX, px);
+            minY = min(minY, py);
+            maxY = max(maxY, py);
         }
     }
     // do culling
@@ -405,6 +495,7 @@ quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double
     buildIndices.resize(N);
     std::iota(buildIndices.begin(), buildIndices.end(), 0);
 
+    neighbors.resize(N);
 
     // Base body fill
     for(int i = 0; i < N; i++) {
@@ -426,7 +517,7 @@ quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double
     bodies.py[0] = 0.0f;
     bodies.diffuse[0] = 0;
 
-    for (int i = 1; i < 10; i++) {
+    for (int i = 1; i < 7; i++) {
         bodies.mass[i] = 0.1;
         bodies.size[i] = 5 * size;
         bodies.diffuse[i] = 0;

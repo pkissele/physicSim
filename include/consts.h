@@ -18,16 +18,13 @@ namespace Consts {
     // Simulation constants
     //
 
-    // const int N = 1000000;
-    constexpr int N = 10000;
-    // const double mass = 0.00005;
+    constexpr int N = 100000;
     constexpr double mass = 0.000005;
     constexpr double bodySize = 5;
 
     constexpr float theta = 0.7;
     constexpr float init_theta = 0.4; // more accurate initialization
 
-    // constexpr float gravEpsilon = 0.05;
     constexpr float gravEpsilon = 0.5;
     constexpr float gravEpsilonSq = gravEpsilon*gravEpsilon;
 
@@ -40,6 +37,9 @@ namespace Consts {
     constexpr float MIN_NODE_SIZE = 1e-6f;
 
     constexpr float INIT_TEMP = 1;
+    constexpr float NEIGHBOR_SKIN = 0.3f;
+    constexpr float DENS_TO_PRESS = 0.07f; // manually tuned value, to be fixed
+
 
     //
     // Engine constants
@@ -65,6 +65,5 @@ namespace Consts {
     constexpr int LOG_ENERGY_INTERVAL = 1;
 
     constexpr int MASS_DISPLAY_THRESHOLD = 5;
-    // constexpr float VISIBILITY = 0.02;
-    constexpr float VISIBILITY = 1;
+    constexpr float VISIBILITY = 0.1;
 }

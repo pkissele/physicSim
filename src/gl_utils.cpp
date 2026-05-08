@@ -72,6 +72,14 @@ void uploadBuffer(GLuint buf, const void* data, size_t bytes) {
 }
 
 
+void drawVAONoBind(GLuint program, GLuint vao, GLenum mode, int count) {
+    glUseProgram(program);
+    glBindVertexArray(vao);
+    glDrawArrays(mode, 0, count);
+    glBindVertexArray(0);
+}
+
+
 void drawVAO(GLuint program, GLuint vao, GLenum mode, int count) {
     glUseProgram(program);
     glBindVertexArray(vao);

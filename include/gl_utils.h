@@ -16,6 +16,8 @@ GLuint attachVBO(int attribIndex, int components, int count);
 
 void uploadBuffer(GLuint buf, const void* data, size_t bytes);
 
+void drawVAONoBind(GLuint program, GLuint vao, GLenum mode, int count);
+
 void drawVAO(GLuint program, GLuint vao, GLenum mode, int count);
 
 GLuint compile_shader(GLenum type, const char* src);
