@@ -21,7 +21,7 @@ namespace Consts {
     // const int N = 1000000;
     constexpr int N = 10000;
     // const double mass = 0.00005;
-    constexpr double mass = 0.0005;
+    constexpr double mass = 0.000005;
     constexpr double bodySize = 5;
 
     constexpr float theta = 0.7;

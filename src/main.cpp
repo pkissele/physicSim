@@ -117,7 +117,7 @@ int main(int argc, char** argv) {
     cout << "Starting main loop (press ESC to quit, S to toggle saving, SPACE to pause/resume, P to save single frame)" << endl;
     int displayFrame = 1;
     while (!glfwWindowShouldClose(window)) {
-        if(state.paused || state.guiPaused) {
+        if(state.guiPaused) {
             this_thread::sleep_for(chrono::milliseconds(10));
             glfwPollEvents();
             double now = glfwGetTime();

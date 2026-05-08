@@ -3,6 +3,7 @@
 Galaxy simulation
 
 Branches:
-- Main (most updated)
-- Tree (Basic quadtree)
-- Standard (Pairwise exact computation)
+- Main (SPH, most updated)
+- Parallel (Gravity, Parallelized tree)
+- Tree (Gravity, Basic quadtree)
+- Standard (Gravity, Pairwise exact computation)
