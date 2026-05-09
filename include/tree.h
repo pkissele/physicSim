@@ -12,6 +12,7 @@ class quadTreeSim {
 
         void step(double dt, int curStep, bool LOG_ENERGY, bool LOG_TIME);
 
+        void findDensity2(int bInd);
         void findDensity(int bInd);
 
         void computePressureAccel(int bInd);

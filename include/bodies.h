@@ -21,6 +21,7 @@ struct Bodies { int N; std::vector<float> mass;
     std::vector<float> dens;
     std::vector<float> densNew;
     std::vector<float> energy;
+    std::vector<float> h;
 
 
     Bodies(int nVal) : N(nVal){
@@ -41,6 +42,7 @@ struct Bodies { int N; std::vector<float> mass;
         dens.resize(N, 0.0f);
         densNew.resize(N, 0.0f);
         energy.resize(N, 0.0f);
+        h.resize(N, 0.0f);
     }
     //
     // std::vector<std::vector<float>*> arrays() {

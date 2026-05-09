@@ -19,7 +19,7 @@ namespace Consts {
     // Simulation constants
     //
 
-    constexpr int N = 10000;
+    constexpr int N = 100000;
     constexpr double mass = 0.0005;
     constexpr double bodySize = 5;
 
@@ -66,5 +66,5 @@ namespace Consts {
     constexpr int LOG_ENERGY_INTERVAL = 1;
 
     constexpr int MASS_DISPLAY_THRESHOLD = 5;
-    constexpr float VISIBILITY = 1;
+    constexpr float VISIBILITY = 0.1;
 }
