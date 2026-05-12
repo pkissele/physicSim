@@ -165,7 +165,7 @@ bool quadTreeSim::neighborsNeedRebuild() {
 }
 
 
-void quadTreeSim::findDensity(int bInd) {
+void quadTreeSim::findDensity2(int bInd) {
     if (bodies.diffuse[bInd] == 0) { bodies.dens[bInd] = 0.0f; return; }
     int leafInd = bodyToLeaf[bInd];
     float h = tree[leafInd].size * 0.5f;
@@ -193,7 +193,7 @@ void quadTreeSim::findDensity(int bInd) {
 }
 
 
-void quadTreeSim::findDensity2(int bInd) {
+void quadTreeSim::findDensity(int bInd) {
     if (bodies.diffuse[bInd] == 0) { bodies.dens[bInd] = 0.0f; bodies.h[bInd] = 0.0f; return; }
 
     constexpr float eta = 1.4f;
@@ -241,8 +241,8 @@ void quadTreeSim::findDensity2(int bInd) {
 void quadTreeSim::computePressureAccel(int bInd) {
     if (bodies.diffuse[bInd] == 0) return;
 
-    float h = tree[bodyToLeaf[bInd]].size * 0.5f;
-    // float h = bodies.h[bInd];
+    float h2 = tree[bodyToLeaf[bInd]].size * 0.5f;
+    float h = bodies.h[bInd];
     if (h < 1e-8f) return;
 
     float invH = 1.0f / h;
@@ -258,7 +258,7 @@ void quadTreeSim::computePressureAccel(int bInd) {
 
     float fX = 0.0f, fY = 0.0f;
 
-    float densCritical = M_PI * DENS_TO_PRESS / (G * sq(h)); 
+    float densCritical = M_PI * DENS_TO_PRESS / (G * h); 
     // float densCritical = 1.1;
     bool passJeans = true;
     // cout << densCritical << endl;
@@ -615,7 +615,7 @@ quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double
     randDisk(bodies, diskScale, 0.3);
 
     // Create massive central body
-    bodies.mass[0] = 1;
+    bodies.mass[0] = 20;
     bodies.size[0] = 5 * size;
     bodies.px[0] = 0.0f;
     bodies.py[0] = 0.0f;
