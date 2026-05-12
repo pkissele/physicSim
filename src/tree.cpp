@@ -28,7 +28,7 @@ using namespace std;
 
 
 
-void quadTreeSim::step(double dt, int curStep, bool LOG_ENERGY, bool LOG_TIME) {
+bool quadTreeSim::step(double dt, int curStep, bool LOG_ENERGY, bool LOG_TIME) {
     buffer << curStep * dt << endl;
     cout << curStep * dt << endl;
     // double kinEnergy = 0, potEnergy = 0;
@@ -111,11 +111,13 @@ void quadTreeSim::step(double dt, int curStep, bool LOG_ENERGY, bool LOG_TIME) {
     swap(bodies.ax, bodies.axNew);
     swap(bodies.ay, bodies.ayNew);
 
-    if (curStep == 600) {
-        std::ofstream file("output/counterM" + to_string(centMass) + ".txt");
+    if (curStep == runSteps) {
+        std::ofstream file("output/counterM" + to_string((int)centMass) + ".txt");
         cout << "wrote file" << endl;
         file << buffer.str();
+        return true;
     }
+    return false;
 }
 
 

@@ -36,8 +36,53 @@ double displayY = 0;
 
 
 int main(int argc, char** argv) {
+   // Runtime options
+    bool save_frames = false;
+    bool save_single_frame = false;
+
+    // parse optional args
+    for (int i=1;i<argc;i++) if ((string)argv[i] == "--save") save_frames = true;
+
+    
+    // Simulation/window state
+    globalState state{save_frames, save_single_frame, displayW, displayH, displayX, displayY, nullptr};
+
+    // Initialize simulation
+    quadTreeSim sim(N, mass, bodySize, viewW, viewH);
+
+    string outdir = "outputFrames";
+    if (!filesystem::exists(outdir)) filesystem::create_directory(outdir);
+
+    // Runtime variables
+    double dt = (double)1/FPS_TARGET;
+    int frame_idx = 0;
+    double lastTime = glfwGetTime();
+    int lastSavedFrame = -1;
+
+    // Threading setup
+    state.buffers[0] = Buffer(N);
+    state.buffers[1] = Buffer(N);
+    Bodies& initBodies = sim.getBodies();
+
+    updateBuffer(state, 0, initBodies);
+
+    // Start simulation thread
+    atomic<bool> running{true};
+    thread simThread(simulate, ref(sim), ref(state), ref(running), dt, LOG_ENERGY, LOG_SIM_TIME);
+
+
+    // HEADLESS
+    if constexpr (HEADLESS) {
+        simThread.join();
+        return 0;
+    }
+
+
+    // GUI
     GLFWwindow* window = initWindow(screenW, screenH, "Galaxy Sim");
     if (!window) return -1;
+    state.window = window;
+    
 
     float quadVerts[] = {-1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f};
     auto [quadVAO, quadVBO] = createStaticVAO(quadVerts, sizeof(quadVerts));
@@ -53,7 +98,6 @@ int main(int argc, char** argv) {
     GLuint sizeVBO = attachVBO(4, 1, N);
     GLuint densVBO = attachVBO(5, 1, N);
 
-
     // Unbind VAO (important to prevent overwriting) and VBO
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -61,50 +105,9 @@ int main(int argc, char** argv) {
     GLuint program = createProgram("shaders/vertex.glsl", "shaders/fragment.glsl");
     GLuint bgProgram = createProgram("shaders/bg_vertex.glsl", "shaders/bg_fragment.glsl");
 
-
-    // Runtime options
-    bool save_frames = false;
-    bool save_single_frame = false;
-
-    // Simulation/window state
-    globalState state{save_frames, save_single_frame, displayW, displayH, displayX, displayY, window};
-
-
-    // parse optional args
-    for (int i=1;i<argc;i++) if ((string)argv[i] == "--save") save_frames = true;
-
-    string outdir = "outputFrames";
-    if (!filesystem::exists(outdir)) filesystem::create_directory(outdir);
-
     // define keybinds
     glfwSetWindowUserPointer(window, &state);
     glfwSetKeyCallback(window, keyCallback);
-
-
-    // Runtime variables
-    double dt = (double)1/FPS_TARGET;
-    int frame_idx = 0;
-    double lastTime = glfwGetTime();
-    int lastSavedFrame = -1;
-
-    // Initialize simulation
-    quadTreeSim sim(N, mass, bodySize, viewW, viewH);
-
-
-    // Threading setup
-    state.buffers[0] = Buffer(N);
-    state.buffers[1] = Buffer(N);
-    Bodies& initBodies = sim.getBodies();
-
-    updateBuffer(state, 0, initBodies);
-
-    atomic<bool> running{true};
-
-
-    // Start simulation thread
-    thread simThread(simulate, ref(sim), ref(state), ref(running), dt, LOG_ENERGY, LOG_SIM_TIME);
-
-
 
     GLint colorLoc          = glGetUniformLocation(program,         "color");
     GLint displaySizeLoc    = glGetUniformLocation(program,   "displaySize");
@@ -113,8 +116,8 @@ int main(int argc, char** argv) {
     GLint visibilityLoc     = glGetUniformLocation(program,    "visibility");
     GLint passLoc           = glGetUniformLocation(program,     "passIndex");
 
-    const Buffer* buffer = &state.buffers[0];
 
+    const Buffer* buffer = &state.buffers[0];
 
     cout << "Starting main loop (press ESC to quit, S to toggle saving, SPACE to pause/resume, P to save single frame)" << endl;
     int displayFrame = 1;
@@ -223,25 +226,31 @@ void simulate(quadTreeSim& sim, globalState& shared, atomic<bool>& running, doub
         if (LOG_ENERGY) INFO_FLAG_ENERGY = (step % LOG_ENERGY_INTERVAL == 0);
 
         auto start = chrono::high_resolution_clock::now();
-        sim.step(dt, step, INFO_FLAG_ENERGY, (LOG_SIM_TIME && step%LOG_SIM_TIME_INTERVAL==0));
+        bool done = sim.step(dt, step,INFO_FLAG_ENERGY, (LOG_SIM_TIME && step%LOG_SIM_TIME_INTERVAL==0));
         auto end = chrono::high_resolution_clock::now();
+        if(!done) {
+            double elapsed = chrono::duration<double, milli>(end - start).count();
+            if (LOG_SIM_TIME && step%LOG_SIM_TIME_INTERVAL==0) cout << "simulation step took "<< fixed << setprecision(2) << elapsed << " ms" << endl;
 
-        double elapsed = chrono::duration<double, milli>(end - start).count();
-        if (LOG_SIM_TIME && step%LOG_SIM_TIME_INTERVAL==0) cout << "simulation step took "<< fixed << setprecision(2) << elapsed << " ms" << endl;
+            Bodies& bodies = sim.getBodies();
+            if (LOG_SIM_TIME && step%LOG_SIM_TIME_INTERVAL==0) cout << "bodies: " << bodies.N << endl << endl; 
 
-        Bodies& bodies = sim.getBodies();
-        if (LOG_SIM_TIME && step%LOG_SIM_TIME_INTERVAL==0) cout << "bodies: " << bodies.N << endl << endl; 
+            int writeInd = 1 - shared.readInd.load();
 
-        int writeInd = 1 - shared.readInd.load();
-
-        updateBuffer(shared, writeInd, bodies);
-        {
-            lock_guard<mutex> lock(shared.swapMutex);
-            shared.readInd.store(writeInd);
-            shared.newFrame.store(true);
-            shared.simStep++;
+            updateBuffer(shared, writeInd, bodies);
+            {
+                lock_guard<mutex> lock(shared.swapMutex);
+                shared.readInd.store(writeInd);
+                shared.newFrame.store(true);
+                shared.simStep++;
+            }
+            step++;
+        } else {
+            running = false;
+            if (shared.window) glfwSetWindowShouldClose(shared.window, GLFW_TRUE);
+            break;
         }
-        step++;
+
     }
 }
 

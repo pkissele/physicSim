@@ -11,7 +11,7 @@ class quadTreeSim {
     public:
         quadTreeSim(int N, double mass, double size, double viewW, double viewH);
 
-        void step(double dt, int curStep, bool LOG_ENERGY, bool LOG_TIME);
+        bool step(double dt, int curStep, bool LOG_ENERGY, bool LOG_TIME);
 
         void findDensity2(int bInd);
 
