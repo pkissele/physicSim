@@ -3,12 +3,15 @@
 #include <cassert>
 #include <numeric>
 #include <random>
+#include <string>
 #include <vector>
 #include <cmath>
 #include <iostream>
 #include <algorithm>
 #include <execution>
 #include <unordered_set>
+#include <sstream>
+#include <fstream>
 
 #include <Eigen/Dense>
 
@@ -26,6 +29,7 @@ using namespace std;
 
 
 void quadTreeSim::step(double dt, int curStep, bool LOG_ENERGY, bool LOG_TIME) {
+    buffer << curStep * dt << endl;
     cout << curStep * dt << endl;
     // double kinEnergy = 0, potEnergy = 0;
 
@@ -81,16 +85,13 @@ void quadTreeSim::step(double dt, int curStep, bool LOG_ENERGY, bool LOG_TIME) {
             }
         }
     }
-    // int starCounter = 0;
-    // float avgMass = 0;
-    // for(int i = 0; i < N; i++) {
-    //     if(bodies.diffuse[i] == 0) {
-    //         starCounter += 1;
-    //         avgMass += bodies.mass[i];
-    //     }
-    // }
-    // cout << starCounter << endl;
-    // cout << avgMass / (float)starCounter << endl;
+    int starCounter = 0;
+    for(int i = 0; i < N; i++) {
+        if(bodies.diffuse[i] == 0) {
+            starCounter += 1;
+        }
+    }
+    buffer << starCounter << endl;
 
 
     // half-step velocity (kick)
@@ -109,6 +110,12 @@ void quadTreeSim::step(double dt, int curStep, bool LOG_ENERGY, bool LOG_TIME) {
     // }
     swap(bodies.ax, bodies.axNew);
     swap(bodies.ay, bodies.ayNew);
+
+    if (curStep == 600) {
+        std::ofstream file("output/counterM" + to_string(centMass) + ".txt");
+        cout << "wrote file" << endl;
+        file << buffer.str();
+    }
 }
 
 
@@ -258,18 +265,12 @@ void quadTreeSim::computePressureAccel(int bInd) {
 
     float fX = 0.0f, fY = 0.0f;
 
-    float densCritical = M_PI * DENS_TO_PRESS / (G * h); 
+    float densCritical = M_PI * DENS_TO_PRESS / (0.2 * G * h); 
     // float densCritical = 1.1;
     bool passJeans = true;
-    // cout << densCritical << endl;
-    // cout << neighbors[bInd].size() << endl;
 
     float divV = 0.0f;
     for (int j : neighbors[bInd]) {
-        // if(bodies.dens[j] < densCritical) {
-        //     // cout << bodies.dens[j] << endl;
-        //     passJeans = false;
-        // }
         float dx = bodies.px[j] - bX;
         float dy = bodies.py[j] - bY;
         float d2 = sq(dx) + sq(dy);
@@ -615,17 +616,18 @@ quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double
     randDisk(bodies, diskScale, 0.3);
 
     // Create massive central body
-    bodies.mass[0] = 20;
+    bodies.mass[0] = centMass;
     bodies.size[0] = 5 * size;
     bodies.px[0] = 0.0f;
     bodies.py[0] = 0.0f;
     bodies.diffuse[0] = 0;
+    
 
-    for (int i = 1; i < 7; i++) {
-        bodies.mass[i] = 0.5;
-        bodies.size[i] = 2 * size;
-        bodies.diffuse[i] = 0;
-    }
+    // for (int i = 1; i < 7; i++) {
+    //     bodies.mass[i] = 0.5;
+    //     bodies.size[i] = 2 * size;
+    //     bodies.diffuse[i] = 0;
+    // }
 
     // Initialize into stable orbit
     buildTree();

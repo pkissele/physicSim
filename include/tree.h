@@ -1,5 +1,6 @@
 #pragma once
 #include <atomic>
+#include <sstream>
 #include <vector>
 #include <unordered_set>
 
@@ -13,6 +14,7 @@ class quadTreeSim {
         void step(double dt, int curStep, bool LOG_ENERGY, bool LOG_TIME);
 
         void findDensity2(int bInd);
+
         void findDensity(int bInd);
 
         void computePressureAccel(int bInd);
@@ -71,4 +73,6 @@ class quadTreeSim {
         bool neighborsDirty = true;
         std::vector<int> instabilities;
         std::unordered_set<int> usedNbrs;
+
+        std::ostringstream buffer;
 };

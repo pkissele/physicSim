@@ -1,6 +1,5 @@
 .vscode
 *build
-*output
 *outputFrames
 *movie.gif
 .clangd
@@ -11,6 +10,7 @@ perf.
 perf.data.**
 
 venv
+.venv
 
 CMakeLists.txt.user
 CMakeCache.txt

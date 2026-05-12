@@ -21,6 +21,7 @@ namespace Consts {
 
     constexpr int N = 100000;
     constexpr double mass = 0.0005;
+    constexpr double centMass = 80;
     constexpr double bodySize = 5;
 
     constexpr float theta = 0.7;
