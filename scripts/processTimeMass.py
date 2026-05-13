@@ -9,6 +9,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from scipy.optimize import curve_fit
 import numpy as np
 from scipy.optimize import curve_fit, minimize_scalar
+from scipy import stats
 
 
 def read_folder(folder_path: str) -> dict[str, str]:
@@ -77,7 +78,7 @@ for key in result.keys():
 
 cb = fig.colorbar(
     cm.ScalarMappable(norm=norm, cmap=cmap),
-    ax=ax, label="PBH Mass ($M_\odot$)", pad=0.02
+    ax=ax, label="PBH Mass", pad=0.02
 )
 cb.outline.set_edgecolor("#3a2d6b")
 cb.outline.set_linewidth(1.0)
@@ -178,3 +179,81 @@ ax.spines[["top", "right"]].set_visible(False)
 plt.tight_layout()
 plt.show()
 
+# ════════════════════════════════════════════════════════════════════════
+# EXPONENTIAL SATURATION FIT  —  ln(A) vs M
+# ════════════════════════════════════════════════════════════════════════
+
+def exp_sat(x, a, k, c):
+    return a * (1 - np.exp(-k * (x - 2.5)))
+
+fit_exclude  = {30}
+plot_exclude = {1, 15, 20}
+
+finalM_sat, finalA_sat = [], []
+
+for m in result.keys():
+    if m in fit_exclude:
+        continue
+    curData = result[m][100:]
+    x = np.array([t[0] for t in curData])
+    y = np.array([t[1] for t in curData])
+
+    popt, _ = curve_fit(
+        exp_sat, x, y,
+        p0=[50, 0.5, 2.5],
+        bounds=([0, 0, -np.inf], [np.inf, np.inf, np.inf]),
+        maxfev=10000
+    )
+    a_fit, k_fit, c_fit = popt
+    print(f"M={m:5d}  a={a_fit:.3f}  k={k_fit:.3f}  c={c_fit:.3f}")
+    finalM_sat.append(m)
+    finalA_sat.append(np.log(a_fit))
+
+finalM_sat = np.array(finalM_sat)
+finalA_sat = np.array(finalA_sat)
+
+# ── Linear fit + stats ────────────────────────────────────────────────
+slope_s, intercept_s, r_val, p_val, _ = stats.linregress(finalM_sat, finalA_sat)
+A_pred_sat = slope_s * finalM_sat + intercept_s
+
+ss_res = np.sum((finalA_sat - A_pred_sat) ** 2)
+ss_tot = np.sum((finalA_sat - finalA_sat.mean()) ** 2)
+r2_sat = 1 - ss_res / ss_tot
+
+print(f"\nln(A) = {slope_s:.4f}·M + {intercept_s:.3f}")
+print(f"R = {r_val:.6f},  R² = {r2_sat:.4f},  p = {p_val:.2e}")
+
+# ── Plot ──────────────────────────────────────────────────────────────
+fig, ax = plt.subplots(figsize=(8, 5))
+
+m_range  = np.linspace(finalM_sat.min(), finalM_sat.max(), 300)
+fit_line = slope_s * m_range + intercept_s
+
+# residual lines
+for m, a, a_hat in zip(finalM_sat, finalA_sat, A_pred_sat):
+    ax.plot([m, m], [a, a_hat],
+            color="#a08ee0", linewidth=1.0, linestyle="--", zorder=2)
+
+ax.plot(m_range, fit_line,
+        "--", color="#c44fa0", linewidth=1.8, zorder=3,
+        label=f"$\\ln A = {slope_s:.4f}\\,M + {intercept_s:.3f}$"
+              f"\n$R = {r_val:.4f},\\quad p = {p_val:.2e}$")
+
+ax.scatter(finalM_sat, finalA_sat,
+           color="#6a3fbf", s=65, zorder=4,
+           edgecolors="#1e1a3f", linewidths=0.6, label="Fitted $\\ln(A)$")
+
+# # mass labels on each point
+# for m, a in zip(finalM_sat, finalA_sat):
+#     ax.annotate(str(int(m)), (m, a),
+#                 textcoords="offset points", xytext=(5, 4),
+#                 fontsize=7.5, color="#3a2d6b")
+#
+ax.set_xlabel("PBH Mass")
+ax.set_ylabel("$\\ln$(Amplitude  $A$)")
+ax.set_title("Log Star Formation Amplitude vs PBH Mass", color="#1e1a3f")
+ax.legend(fontsize=10)
+ax.spines[["top", "right"]].set_visible(False)
+
+plt.tight_layout()
+plt.show()
