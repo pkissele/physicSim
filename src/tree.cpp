@@ -30,7 +30,7 @@ using namespace std;
 
 bool quadTreeSim::step(double dt, int curStep, bool LOG_ENERGY, bool LOG_TIME) {
     buffer << curStep * dt << endl;
-    cout << curStep * dt << endl;
+    cout << curStep << endl;
     // double kinEnergy = 0, potEnergy = 0;
 
     // half-step velocity (kick)
@@ -112,7 +112,7 @@ bool quadTreeSim::step(double dt, int curStep, bool LOG_ENERGY, bool LOG_TIME) {
     swap(bodies.ay, bodies.ayNew);
 
     if (curStep == runSteps) {
-        std::ofstream file("output/counterM" + to_string((int)centMass) + ".txt");
+        std::ofstream file("output/counterM" + to_string((int)centMass) + "_s" + to_string(SEED) + ".txt");
         cout << "wrote file" << endl;
         file << buffer.str();
         return true;

@@ -7,9 +7,7 @@
 
 using Vec2 = Eigen::Vector2d;
 
-uint32_t expandBits(uint32_t x);
-
-uint32_t mortonCode(float x, float y, float minX, float minY, float invScale);
+void setRng();
 
 void randDisk(Bodies& b, double maxRad, double minRad);
 

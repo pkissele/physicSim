@@ -36,14 +36,17 @@ double displayY = 0;
 
 
 int main(int argc, char** argv) {
-   // Runtime options
+    // Runtime options
     bool save_frames = false;
     bool save_single_frame = false;
+    bool HEADLESS = false;
 
     // parse optional args
-    for (int i=1;i<argc;i++) if ((string)argv[i] == "--save") save_frames = true;
+    for (int i=1;i<argc;i++) {
+        if ((string)argv[i] == "--save") save_frames = true;
+        if ((string)argv[i] == "--headless") HEADLESS = true;
+    }
 
-    
     // Simulation/window state
     globalState state{save_frames, save_single_frame, displayW, displayH, displayX, displayY, nullptr};
 
@@ -72,7 +75,7 @@ int main(int argc, char** argv) {
 
 
     // HEADLESS
-    if constexpr (HEADLESS) {
+    if (HEADLESS) {
         simThread.join();
         return 0;
     }

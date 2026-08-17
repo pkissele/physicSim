@@ -10,13 +10,12 @@ for mass in "${MASSES[@]}"; do
     # Patch centMass in consts.h using sed
     sed -i "s/constexpr double centMass = [0-9.]*/constexpr double centMass = $mass/" "$CONSTS_FILE"
 
-    # Rebuild (adjust to your build system)
     cmake --build build
 
     # Run headlessly or normally — add --save or other flags as needed
-    ./build/runSim
+    ./build/runSim --headless
 
-    echo "=== Done with centMass = $mass ==="
+    echo "Done with centMass = $mass"
 done
 
 echo "All runs complete."
