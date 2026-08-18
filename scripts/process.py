@@ -229,8 +229,12 @@ def main():
 
     fit_label = (f"$\\ln A = ({slope:.4f}\\pm{sigma_slope:.4f})\\,M + ({intercept:.3f}\\pm{sigma_intercept:.3f})$\n"
                  f"$R^2 = {r2:.3f},\\ \\chi^2_\\nu = {chi2_red:.2f}$")
+
+    for mass, A_value, A_hat in zip(masses, lnA_mean, lnA_pred):
+        ax.plot([mass, mass], [A_value, A_hat], color="#a08ee0", linewidth=1.0, linestyle="--", zorder=2)
+
     ax.plot(m_range, fit_line, "--", color="#c44fa0", linewidth=1.8, zorder=3, label=fit_label)
-    ax.errorbar(masses, lnA_mean, yerr=lnA_err, fmt="o", color="#6a3fbf", markersize=7,
+    ax.errorbar(masses, lnA_mean, fmt="o", color="#6a3fbf", markersize=7,
                 capsize=4, zorder=4, markeredgecolor="#1e1a3f", markeredgewidth=0.6,
                 label="Mean $\\ln(A)$ across realizations")
 

@@ -75,4 +75,5 @@ class quadTreeSim {
         std::unordered_set<int> usedNbrs;
 
         std::ostringstream buffer;
+        std::ostringstream timeBuffer;
 };

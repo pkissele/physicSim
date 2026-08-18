@@ -1,6 +1,7 @@
 #include "tree.h"
 
 #include <cassert>
+#include <iomanip>
 #include <numeric>
 #include <random>
 #include <string>
@@ -29,6 +30,7 @@ using namespace std;
 
 
 bool quadTreeSim::step(double dt, int curStep, bool LOG_ENERGY, bool LOG_TIME) {
+
     buffer << curStep * dt << endl;
     cout << curStep << endl;
     // double kinEnergy = 0, potEnergy = 0;
@@ -93,6 +95,9 @@ bool quadTreeSim::step(double dt, int curStep, bool LOG_ENERGY, bool LOG_TIME) {
     }
     buffer << starCounter << endl;
 
+    double wallNow = std::chrono::duration<double>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    timeBuffer << std::fixed << std::setprecision(6) << wallNow << endl;
 
     // half-step velocity (kick)
     for (int i = 0; i < N; i++) {
@@ -113,10 +118,15 @@ bool quadTreeSim::step(double dt, int curStep, bool LOG_ENERGY, bool LOG_TIME) {
 
     if (curStep == runSteps) {
         std::ofstream file("output/counterM" + to_string((int)centMass) + "_s" + to_string(SEED) + ".txt");
-        cout << "wrote file" << endl;
         file << buffer.str();
+
+        std::ofstream timeFile("output/wallclockM" + to_string((int)centMass) + "_s" + to_string(SEED) + ".txt");
+        timeFile << timeBuffer.str();
+
+        cout << "wrote file" << endl;
         return true;
     }
+
     return false;
 }
 
@@ -594,7 +604,10 @@ void quadTreeSim::computeMassDistribution() {
 
 
 quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double viewH_) : N(N_), viewW(viewW_), viewH(viewH_), bodies(N_) {
-    // Initialize 
+    // Set seed
+    setRng();
+
+    // Initialize
     nodeCnt = 0;
     bodyCost.assign(N, 1.0f);
     tree.resize(N * 8);

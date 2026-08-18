@@ -62,11 +62,11 @@ namespace Consts {
     constexpr int screenH = 1000;
 
     // basic logging
-    constexpr bool LOG_GUI_TIME = false; 
+    constexpr bool LOG_GUI_TIME = false;
     constexpr int LOG_GUI_TIME_INTERVAL = 30;
     constexpr bool LOG_SIM_TIME = false;
     constexpr int LOG_SIM_TIME_INTERVAL = 5;
-    constexpr bool LOG_ENERGY = false; 
+    constexpr bool LOG_ENERGY = false;
     constexpr int LOG_ENERGY_INTERVAL = 1;
 
     constexpr int MASS_DISPLAY_THRESHOLD = 5;

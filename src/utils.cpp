@@ -23,22 +23,19 @@ mt19937_64 rngBody;
 
 uniform_real_distribution<double> dist01(0.0, 1.0);
 
+// Invoke before using randDisk or randVels
 void setRng() {
     if(SEED == -1) {
-        mt19937_64 rngBody(random_device{}());
-
+        rngBody.seed(random_device{}());
     } else {
-        mt19937_64 rngBody(SEED);
+        rngBody.seed(SEED);
     }
 }
 
 
 void randDisk(Bodies& b, double maxRad, double minRad) {
-    setRng();
-
     for(int i = 0; i < b.N; ++i) {
         double theta = dist01(rngBody) * 2.0 * M_PI;
-        // double r = (maxRad-minRad) * pow(dist01(rngBody), 1) + minRad;
         double r = (maxRad-minRad) * pow(dist01(rngBody), 0.5) + minRad;
 
         Vec2 pos(r * cos(theta), r * sin(theta));
@@ -50,8 +47,6 @@ void randDisk(Bodies& b, double maxRad, double minRad) {
 
 
 void randVels(Bodies& b, double maxRad) {
-    setRng();
-
     for(int i = 0; i < b.N; i++) {
         Vec2 nVel(dist01(rngBody) * maxRad, dist01(rngBody) * maxRad);
         b.vx[i] = nVel[0];
