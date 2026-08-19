@@ -19,11 +19,11 @@ namespace Consts {
     // Simulation constants
     //
 
-    constexpr int N = 100000;
+    constexpr int N = 1000000;
     constexpr double mass = 0.0005;
-    constexpr double centMass = 1;
+    constexpr double centMass = 20;
     constexpr double bodySize = 5;
-    constexpr int runSteps = 1600;
+    constexpr int runSteps = 600;
 
     constexpr float theta = 0.7;
     constexpr float init_theta = 0.4; // more accurate initialization
@@ -39,6 +39,10 @@ namespace Consts {
 
     constexpr float MIN_NODE_SIZE = 1e-6f;
 
+    constexpr int DENS_ITER = 5;
+    constexpr float eta = 1.4f; // scale neighbor consideration radius
+    constexpr int MAX_NEIGHBORS = 512;
+
     constexpr float INIT_TEMP = 1;
     constexpr float NEIGHBOR_SKIN = 0.3f;
     constexpr float DENS_TO_PRESS = 0.006f;
@@ -47,11 +51,10 @@ namespace Consts {
     //
     // Engine constants
     //
-    constexpr int SEED = 1;
-    constexpr bool HEADLESS = false;
+    constexpr int SEED = 3;
+    // constexpr bool HEADLESS = false;
     constexpr int FPS_TARGET = 30;
     constexpr double FRAME_TARGET = 1000.0/FPS_TARGET;
-
 
     // view
     constexpr double viewW = 30.0;

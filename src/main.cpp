@@ -85,7 +85,7 @@ int main(int argc, char** argv) {
     GLFWwindow* window = initWindow(screenW, screenH, "Galaxy Sim");
     if (!window) return -1;
     state.window = window;
-    
+
 
     float quadVerts[] = {-1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f};
     auto [quadVAO, quadVBO] = createStaticVAO(quadVerts, sizeof(quadVerts));

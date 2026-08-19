@@ -18,9 +18,7 @@ PLOT_TIME_OFFSET = DT_PER_FRAME * BURN_IN_FRAMES
 
 MODEL_T0 = 2.5
 
-FIT_EXCLUDE_MASSES: set[int] = set()
-
-FNAME_PATTERN = re.compile(r"M(\d+)_s(\d+)")
+FNAME_PATTERN = re.compile(r"counterM(\d+)_s(\d+)")
 
 
 def read_folder(folder_path: str) -> dict[int, dict[int, list[tuple[float, float]]]]:
@@ -32,14 +30,12 @@ def read_folder(folder_path: str) -> dict[int, dict[int, list[tuple[float, float
             continue
         m = FNAME_PATTERN.search(entry.name)
         if m is None:
-            print(f"Skipping unrecognized file: {entry.name}", file=sys.stderr)
             continue
         mass, seed = int(m.group(1)), int(m.group(2))
 
         with open(entry.path, "r", encoding="utf-8") as f:
             nums = [float(value) for value in f.read().splitlines()]
         if len(nums) % 2 != 0:
-            print(f"Warning: odd value count in {entry.name}, dropping last value", file=sys.stderr)
             nums = nums[:-1]
 
         data[mass][seed] = list(zip(nums[::2], nums[1::2]))
@@ -53,7 +49,6 @@ def truncate_cmap(cmap, min_val=0.0, max_val=1.0, n=256):
 
 
 # Model
-
 def exp_sat(x, a, k):
     return a * (1 - np.exp(-k * (x - MODEL_T0)))
 
@@ -84,7 +79,7 @@ def main():
     result = read_folder(folder)
 
     if not result:
-        sys.exit(f"No M<mass>_s<seed>.txt files found in {folder!r}")
+        sys.exit(f"No counterM<mass>_s<seed>.txt files found in {folder!r}")
 
     # Plot 1
     cmap = truncate_cmap(cm.plasma, 0.10, 0.88)
@@ -98,8 +93,7 @@ def main():
         series = [np.array(runs[BURN_IN_FRAMES:]) for runs in seeds.values()]
         lengths = {len(s) for s in series}
         if len(lengths) != 1:
-            print(f"Warning: mass {mass} has mismatched series lengths {lengths}, "
-                  f"truncating to shortest", file=sys.stderr)
+            print(f"mass {mass} has mismatched series lengths {lengths}", file=sys.stderr)
             n_min = min(lengths)
             series = [s[:n_min] for s in series]
 
@@ -113,7 +107,7 @@ def main():
             ax.fill_between(x, ys.min(axis=0), ys.max(axis=0), color=color, alpha=0.15, linewidth=0)
 
     sm = cm.ScalarMappable(norm=norm, cmap=cmap)
-    cb = fig.colorbar(sm, ax=ax, label="PBH Mass", pad=0.02)
+    cb = fig.colorbar(sm, ax=ax, label="PBH Mass", pad=0.02, fraction=0.05)
     cb.outline.set_edgecolor("#3a2d6b")
     cb.outline.set_linewidth(1.0)
     cb.ax.yaxis.label.set_color("#1e1a3f")
@@ -133,39 +127,23 @@ def main():
     masses, lnA_mean, lnA_err, n_seeds_used = [], [], [], []
 
     for mass, seeds in result.items():
-        if mass in FIT_EXCLUDE_MASSES:
-            continue
-
         lnA_i, sigrel_i = [], []
 
         for seed, series in seeds.items():
             arr = np.array(series[BURN_IN_FRAMES:])
             x, y = arr[:, 0], arr[:, 1]
 
-            try:
-                p0 = [max(y.max(), 1.0), 0.5]
-                popt, pcov = curve_fit(exp_sat, x, y, p0=p0, bounds=([0, 0], [np.inf, np.inf]), maxfev=10000)
-            except RuntimeError as e:
-                print(f"Fit failed for M={mass} seed={seed}: {e}", file=sys.stderr)
-                continue
+            p0 = [max(y.max(), 1.0), 0.5, MODEL_T0]
+            bounds = ([0, 0, 0], [np.inf, np.inf, x.max()])
+            popt, pcov = curve_fit(exp_sat_free_t0, x, y, p0=p0, bounds=bounds, maxfev=10000)
 
-            a_fit, k_fit = popt
+            a_fit, k_fit, t0_fit = popt
             perr = np.sqrt(np.diag(pcov))
 
-            if not np.all(np.isfinite(perr)):
-                print(f"Warning: non-finite covariance for M={mass} seed={seed}, "
-                      f"dropping this realization's fit uncertainty", file=sys.stderr)
-                continue
-
-            print(f"M={mass:3d} seed={seed:2d}  A={a_fit:.3f}  k={k_fit:.3f}  "
-                  f"sigma_A={perr[0]:.3f}")
+            print(f"M={mass:3d} seed={seed:2d}  A={a_fit:.3f}  k={k_fit:.3f} t0={t0_fit:.3f} sigma_A={perr[0]:.3f}")
 
             lnA_i.append(np.log(a_fit))
             sigrel_i.append(perr[0] / a_fit)  # sigma_lnA = sigma_A / A
-
-        if len(lnA_i) == 0:
-            print(f"No usable fits for mass {mass}, skipping", file=sys.stderr)
-            continue
 
         lnA_i = np.array(lnA_i)
         sigrel_i = np.array(sigrel_i)
@@ -185,14 +163,6 @@ def main():
     lnA_err = np.array(lnA_err)
     n_seeds_used = np.array(n_seeds_used)
 
-    if np.any(np.isnan(lnA_err)) or np.any(lnA_err == 0):
-        print("Warning: some masses have zero/undefined combined error "
-              "(likely single-seed with a degenerate fit); "
-              "these will be down-weighted using the smallest nonzero error instead.",
-              file=sys.stderr)
-        floor = np.nanmin(lnA_err[lnA_err > 0]) if np.any(lnA_err > 0) else 1.0
-        lnA_err = np.where((lnA_err == 0) | np.isnan(lnA_err), floor, lnA_err)
-
     # Weighted regression
     weights = 1.0 / lnA_err
     (slope, intercept), cov = np.polyfit(masses, lnA_mean, 1, w=weights, cov="unscaled")
@@ -204,22 +174,15 @@ def main():
 
     ss_res = np.sum((resid / lnA_err) ** 2)  # weighted chi-square
     dof = len(masses) - 2
-    chi2_red = ss_res / dof if dof > 0 else np.nan
 
     ss_res_unweighted = np.sum(resid ** 2)
     ss_tot = np.sum((lnA_mean - lnA_mean.mean()) ** 2)
     r2 = 1 - ss_res_unweighted / ss_tot
 
     n_total_seeds = int(n_seeds_used.sum())
-    print(f"\nWeighted fit over {len(masses)} masses, {n_total_seeds} total realizations:")
+    print(f"\nWeighted fit over {len(masses)} masses, {n_total_seeds} total runs:")
     print(f"ln(A) = ({slope:.4f} +/- {sigma_slope:.4f}) * M + ({intercept:.3f} +/- {sigma_intercept:.3f})")
-    print(f"R^2 = {r2:.4f}, reduced chi^2 = {chi2_red:.3f}")
-
-    excluded = sorted(set(result.keys()) - set(masses.astype(int)) - FIT_EXCLUDE_MASSES)
-    if FIT_EXCLUDE_MASSES:
-        print(f"Excluded masses (FIT_EXCLUDE_MASSES): {sorted(FIT_EXCLUDE_MASSES)}")
-    if excluded:
-        print(f"Masses present in data but dropped due to fit failures: {excluded}")
+    print(f"R^2 = {r2:.4f}")
 
     # Plot 2: ln(A) vs mass
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -227,16 +190,17 @@ def main():
     m_range = np.linspace(masses.min(), masses.max(), 300)
     fit_line = slope * m_range + intercept
 
-    fit_label = (f"$\\ln A = ({slope:.4f}\\pm{sigma_slope:.4f})\\,M + ({intercept:.3f}\\pm{sigma_intercept:.3f})$\n"
-                 f"$R^2 = {r2:.3f},\\ \\chi^2_\\nu = {chi2_red:.2f}$")
+    # fit_label = (f"$\\ln A = ({slope:.4f}\\pm{sigma_slope:.4f})\\,M + ({intercept:.3f}\\pm{sigma_intercept:.3f})$\n"
+                 # f"$R^2 = {r2:.3f},\\ \\chi^2_\\nu = {chi2_red:.2f}$")
 
-    for mass, A_value, A_hat in zip(masses, lnA_mean, lnA_pred):
-        ax.plot([mass, mass], [A_value, A_hat], color="#a08ee0", linewidth=1.0, linestyle="--", zorder=2)
+    fit_label = (f"$\\ln A = {slope:.4f} M + {intercept:.3f}$\n"
+                 f"$R^2 = {r2:.3f}$")
+
+    # for mass, A_value, A_hat in zip(masses, lnA_mean, lnA_pred):
+    #     ax.plot([mass, mass], [A_value, A_hat], color="#a08ee0", linewidth=1.0, linestyle="--", zorder=2)
 
     ax.plot(m_range, fit_line, "--", color="#c44fa0", linewidth=1.8, zorder=3, label=fit_label)
-    ax.errorbar(masses, lnA_mean, fmt="o", color="#6a3fbf", markersize=7,
-                capsize=4, zorder=4, markeredgecolor="#1e1a3f", markeredgewidth=0.6,
-                label="Mean $\\ln(A)$ across realizations")
+    ax.errorbar(masses, lnA_mean, yerr=lnA_err, fmt="o", color="#6a3fbf", markersize=7, capsize=4, zorder=4, markeredgecolor="#1e1a3f", markeredgewidth=0.6, label="Mean $\\ln(A)$ across runs")
 
     ax.set_xlabel("PBH Mass")
     ax.set_ylabel("$\\ln$(Amplitude  $A$)")

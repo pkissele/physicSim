@@ -1,36 +1,53 @@
+import re
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
+import matplotlib.pyplot as plt
+
+FNAME_PATTERN = re.compile(r"wallclockN(\d+)_s(\d+)\.txt")
 
 
-def read_wallclock(path: Path) -> np.ndarray:
-    with open(path) as f:
-        return np.array([float(line) for line in f if line.strip()])
+def run_total(path: Path) -> float:
+    stamps = np.array([float(line) for line in open(path) if line.strip()])
+    return stamps[-1] - stamps[0]
 
 
-def summarize(path: Path):
-    stamps = read_wallclock(path)
-    if len(stamps) < 2:
-        raise ValueError(f"{path} has fewer than 2 timestamps, can't compute deltas")
+folder = Path(sys.argv[1])
+out_csv = Path(sys.argv[2]) if len(sys.argv) > 2 else folder / "scaling.csv"
+out_png = folder / "scaling.png"
 
-    elapsed = stamps - stamps[0]
-    total = elapsed[-1]
-    per_step = np.diff(stamps)
+by_n = defaultdict(list)
+for entry in sorted(folder.iterdir()):
+    m = FNAME_PATTERN.match(entry.name)
+    if m is None:
+        continue
+    n, seed = int(m.group(1)), int(m.group(2))
+    by_n[n].append(run_total(entry))
 
-    if np.any(per_step < 0):
-        print(f"Warning: {path} has a negative per-step delta -- system clock "
-              f"jumped mid-run. Consider switching to steady_clock.", file=sys.stderr)
+Ns = np.array(sorted(by_n))
+means = np.array([np.mean(by_n[n]) for n in Ns])
+stds = np.array([np.std(by_n[n], ddof=1) if len(by_n[n]) > 1 else 0.0 for n in Ns])
 
-    return total, per_step
+# fit power law
+slope, intercept = np.polyfit(np.log(Ns), np.log(means), 1)
 
+fig, ax = plt.subplots(figsize=(7, 5))
+ax.errorbar(Ns, means, yerr=stds, fmt="o", color="#6a3fbf", markersize=7, capsize=4, label="Measured")
 
-if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        sys.exit("Usage: python parse_wallclock.py <wallclock_file>")
+fit_N = np.linspace(Ns.min(), Ns.max(), 200)
+ax.plot(fit_N, np.exp(intercept) * fit_N ** slope, "--", color="#c44fa0", label=f"exponent = {slope:.2f}")
 
-    path = Path(sys.argv[1])
-    total, per_step = summarize(path)
-    print(f"{path.name}: total = {total:.3f} s over {len(per_step) + 1} steps, "
-          f"mean per-step = {per_step.mean() * 1000:.2f} ms, "
-          f"max per-step = {per_step.max() * 1000:.2f} ms")
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlabel("N")
+ax.set_ylabel("Wall-clock time (s)")
+ax.set_title("Runtime vs N")
+ax.legend()
+plt.tight_layout()
+plt.show()
+
+print(f"exponent = {slope:.3f}")
+print(f"wrote {out_csv}")
+print(f"wrote {out_png}")

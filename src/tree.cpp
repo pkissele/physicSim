@@ -36,12 +36,12 @@ bool quadTreeSim::step(double dt, int curStep, bool LOG_ENERGY, bool LOG_TIME) {
     // double kinEnergy = 0, potEnergy = 0;
 
     // half-step velocity (kick)
-    for (int i = 0; i < N; i++) {
+    for (int i = 0; i < bodies.N; i++) {
         bodies.vx[i] += 0.5f * bodies.ax[i] * dt;
         bodies.vy[i] += 0.5f * bodies.ay[i] * dt;
     }
     // full-step position (drift)
-    for (int i = 0; i < N; i++) {
+    for (int i = 0; i < bodies.N; i++) {
         bodies.px[i] += bodies.vx[i] * dt;
         bodies.py[i] += bodies.vy[i] * dt;
     }
@@ -68,17 +68,23 @@ bool quadTreeSim::step(double dt, int curStep, bool LOG_ENERGY, bool LOG_TIME) {
     usedNbrs.clear();
     {
         ScopedTimer t("density solve", LOG_TIME);
-        for (int i = 0; i < N; i++) {
+        #pragma omp parallel for schedule(dynamic, 64)
+        for (int i = 0; i < bodies.N; i++) {
             findDensity(i);
         }
     }
     {
         ScopedTimer t("pressure accel step", LOG_TIME);
-        for (int i = 0; i < N; i++) {
-            computePressureAccel(i);
+        solvePressure();
+    }
+    if (curStep % 10 == 0) {
+        #pragma omp parallel for
+        for (int i = 0; i < bodies.N; i++) {
+            if (neighbors[i].capacity() > 4 * neighbors[i].size() && neighbors[i].capacity() > 128) {
+                neighbors[i].shrink_to_fit();
+            }
         }
     }
-
     if (curStep > 100) {
         for(int i = 0; i < instabilities.size(); i++) {
             int starInd = instabilities[i];
@@ -88,19 +94,18 @@ bool quadTreeSim::step(double dt, int curStep, bool LOG_ENERGY, bool LOG_TIME) {
         }
     }
     int starCounter = 0;
-    for(int i = 0; i < N; i++) {
+    for(int i = 0; i < bodies.N; i++) {
         if(bodies.diffuse[i] == 0) {
             starCounter += 1;
         }
     }
     buffer << starCounter << endl;
 
-    double wallNow = std::chrono::duration<double>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
+    double wallNow = std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
     timeBuffer << std::fixed << std::setprecision(6) << wallNow << endl;
 
     // half-step velocity (kick)
-    for (int i = 0; i < N; i++) {
+    for (int i = 0; i < bodies.N; i++) {
         bodies.vx[i] += 0.5f * bodies.axNew[i] * dt;
         bodies.vy[i] += 0.5f * bodies.ayNew[i] * dt;
         // if (LOG_ENERGY) {
@@ -120,7 +125,7 @@ bool quadTreeSim::step(double dt, int curStep, bool LOG_ENERGY, bool LOG_TIME) {
         std::ofstream file("output/counterM" + to_string((int)centMass) + "_s" + to_string(SEED) + ".txt");
         file << buffer.str();
 
-        std::ofstream timeFile("output/wallclockM" + to_string((int)centMass) + "_s" + to_string(SEED) + ".txt");
+        std::ofstream timeFile("output/wallclockN" + to_string((int)N) + "_s" + to_string(SEED) + ".txt");
         timeFile << timeBuffer.str();
 
         cout << "wrote file" << endl;
@@ -139,9 +144,9 @@ inline float wendlandC2(float q, float kernelNorm) {
 
 
 void quadTreeSim::buildNeighborList() {
-    neighbors.resize(N);
-    #pragma omp parallel for
-    for (int i = 0; i < N; i++) {
+    neighbors.resize(bodies.N);
+    #pragma omp parallel for schedule(dynamic, 64)
+    for (int i = 0; i < bodies.N; i++) {
         neighbors[i].clear();
         if (bodies.diffuse[i] == 0) continue;
 
@@ -151,7 +156,7 @@ void quadTreeSim::buildNeighborList() {
         float bX = bodies.px[i], bY = bodies.py[i];
 
         int nInd = 0;
-        while (nInd != -1) {
+        while (nInd != -1 && neighbors[i].size() < MAX_NEIGHBORS) {
             const Node& node = tree[nInd];
             float halfSize = node.size * 0.5f;
             float dxN = std::max(0.0f, std::abs(bX - treeCold[nInd].cx) - halfSize);
@@ -168,15 +173,22 @@ void quadTreeSim::buildNeighborList() {
         }
     }
 
-    pxAtBuild.assign(bodies.px.begin(), bodies.px.begin() + N);
-    pyAtBuild.assign(bodies.py.begin(), bodies.py.begin() + N);
+    pxAtBuild.assign(bodies.px.begin(), bodies.px.begin() + bodies.N);
+    pyAtBuild.assign(bodies.py.begin(), bodies.py.begin() + bodies.N);
     neighborsDirty = false;
+
+    // size_t totalCap = 0, maxSize = 0;
+    // for (int i = 0; i < bodies.N; i++) {
+    //     totalCap += neighbors[i].capacity();
+    //     maxSize = std::max(maxSize, neighbors[i].size());
+    // }
+    // std::cout << "nbr total cap " << totalCap << " max size " << maxSize << "\n";
 }
 
 
 bool quadTreeSim::neighborsNeedRebuild() {
     float maxD2 = 0.0f;
-    for (int i = 0; i < N; i++) {
+    for (int i = 0; i < bodies.N; i++) {
         maxD2 = std::max(maxD2, sq(bodies.px[i] - pxAtBuild[i]) + sq(bodies.py[i] - pyAtBuild[i]));
     }
     float h0 = tree[bodyToLeaf[0]].size * 0.5f;
@@ -184,38 +196,8 @@ bool quadTreeSim::neighborsNeedRebuild() {
 }
 
 
-void quadTreeSim::findDensity2(int bInd) {
-    if (bodies.diffuse[bInd] == 0) { bodies.dens[bInd] = 0.0f; return; }
-    int leafInd = bodyToLeaf[bInd];
-    float h = tree[leafInd].size * 0.5f;
-    if (h < 1e-8f) { bodies.dens[bInd] = 0.0f; return; }
-
-    float invH = 1.0f / h;
-    float invH2 = invH * invH;
-    float kernelNorm = (7.0f / (4.0f * (float)M_PI)) * invH2;
-    float searchR2 = sq(2.0f * h);
-    float bX = bodies.px[bInd], bY = bodies.py[bInd];
-    float densAccum = 0.0f;
-
-    for (int j : neighbors[bInd]) {
-        float dx = bodies.px[j] - bX;
-        float dy = bodies.py[j] - bY;
-        float d2 = sq(dx) + sq(dy);
-        if (d2 < searchR2) {
-            float q = std::sqrt(d2) * invH;
-            float t = 1.0f - 0.5f * q;
-            float t2 = t * t;
-            densAccum += bodies.mass[j] * kernelNorm * t2 * t2 * (1.0f + 2.0f * q);
-        }
-    }
-    bodies.dens[bInd] = densAccum;
-}
-
-
 void quadTreeSim::findDensity(int bInd) {
     if (bodies.diffuse[bInd] == 0) { bodies.dens[bInd] = 0.0f; bodies.h[bInd] = 0.0f; return; }
-
-    constexpr float eta = 1.4f;
 
     float hLeaf = tree[bodyToLeaf[bInd]].size * 0.5f;
     float h = hLeaf;
@@ -224,7 +206,7 @@ void quadTreeSim::findDensity(int bInd) {
     float bX = bodies.px[bInd], bY = bodies.py[bInd];
     float density = 0.0f;
 
-    for (int iter = 0; iter < 5; iter++) {
+    for (int iter = 0; iter < DENS_ITER; iter++) {
         float invH = 1.0f / h;
         float kernelNorm = (7.0f / (4.0f * (float)M_PI)) * invH * invH;
         float searchR2 = sq(2.0f * h);
@@ -257,7 +239,27 @@ void quadTreeSim::findDensity(int bInd) {
 }
 
 
-void quadTreeSim::computePressureAccel(int bInd) {
+void quadTreeSim::solvePressure() {
+    int numThreads = omp_get_max_threads();
+    std::vector<std::vector<int>> localInstab(numThreads);
+
+    #pragma omp parallel
+    {
+        int tid = omp_get_thread_num();
+        #pragma omp for schedule(dynamic, 64)
+        for (int i = 0; i < bodies.N; i++) {
+            computePressureAccel(i, localInstab[tid]);
+        }
+    }
+
+    for (auto& v : localInstab) {
+        instabilities.insert(instabilities.end(), v.begin(), v.end());
+    }
+    std::sort(instabilities.begin(), instabilities.end());
+}
+
+
+void quadTreeSim::computePressureAccel(int bInd, std::vector<int>& localInstabilities) {
     if (bodies.diffuse[bInd] == 0) return;
 
     float h2 = tree[bodyToLeaf[bInd]].size * 0.5f;
@@ -278,7 +280,6 @@ void quadTreeSim::computePressureAccel(int bInd) {
     float fX = 0.0f, fY = 0.0f;
 
     float densCritical = M_PI * DENS_TO_PRESS / (0.2 * G * h); 
-    // float densCritical = 1.1;
     bool passJeans = true;
 
     float divV = 0.0f;
@@ -306,12 +307,10 @@ void quadTreeSim::computePressureAccel(int bInd) {
 
         float dvx = bodies.vx[j] - bodies.vx[bInd];
         float dvy = bodies.vy[j] - bodies.vy[bInd];
-        // (v_j - v_i) · ∇W_ij, with ∇W_ij = (dWdr/r) * (r_ij_vec)
         divV += -bodies.mass[j] / rhoI * (dvx*dx + dvy*dy) * dWdr * invR;
     }
     if(rhoI > densCritical && divV < 0) {
-    // if(passJeans) {
-        instabilities.push_back(bInd);
+        localInstabilities.push_back(bInd);
     }
 
     if (rhoI > 1e-8f) {
@@ -331,7 +330,6 @@ void quadTreeSim::formStar(int bInd) {
     bodies.size[bInd] *= 2;
     bodies.mass[bInd] += massAccum;
     bodies.diffuse[bInd] = 0;
-    // cout << "Spawned star" << endl;
 }
 
 
@@ -403,14 +401,14 @@ void quadTreeSim::buildTree() {
     float maxX = std::numeric_limits<float>::lowest(), maxY = std::numeric_limits<float>::lowest();
 
     static std::vector<uint8_t> keep;
-    keep.resize(N);
+    keep.resize(bodies.N);
     int totalKeep = 0;
 
     // mark for culling
     float cx = viewW / 2.0f, cy = viewH / 2.0f;
     float maxR2 = sq(ESCAPE_CULL_RAD * std::min(viewW, viewH));
     #pragma omp parallel for reduction(min:minX,minY) reduction(max:maxX,maxY) reduction(+:totalKeep)
-    for (int i = 0; i < N; i++) {
+    for (int i = 0; i < bodies.N; i++) {
         float px = bodies.px[i], py = bodies.py[i];
         float dx = px - cx, dy = py - cy;
         bool k = (sq(dx) + sq(dy) < maxR2) || (bodies.mass[i] > 1.0f);
@@ -424,14 +422,14 @@ void quadTreeSim::buildTree() {
         }
     }
     // do culling
-    if (totalKeep < N) compactArrays(keep, totalKeep);
+    if (totalKeep < bodies.N) compactArrays(keep, totalKeep);
 
     std::iota(buildIndices.begin(), buildIndices.end(), 0);
     treeCold[0].cx = (maxX + minX) / 2.0f;
     treeCold[0].cy = (maxY + minY) / 2.0f;
     tree[0].size = max(abs(maxX - minX), abs(maxY - minY));
     tree[0].lo = 0;
-    tree[0].hi = N;
+    tree[0].hi = bodies.N;
     tree[0].next = -1;
 
     nodeCnt.store(1, std::memory_order_relaxed);
@@ -443,7 +441,7 @@ void quadTreeSim::buildTree() {
     }
     reorderBodies();
 
-    bodyToLeaf.resize(N);
+    bodyToLeaf.resize(bodies.N);
     for (int n = 0; n < nodeCnt; n++) {
         if (tree[n].firstChild == -1) {
             for (int i = tree[n].lo; i < tree[n].hi; i++) {
@@ -458,9 +456,9 @@ void quadTreeSim::buildTree() {
 
 void quadTreeSim::compactArrays(const std::vector<uint8_t>& keep, int totalKeep) {
     static std::vector<int> newIdx;
-    newIdx.resize(N);
+    newIdx.resize(bodies.N);
     int running = 0;
-    for (int i = 0; i < N; i++) {
+    for (int i = 0; i < bodies.N; i++) {
         newIdx[i] = running;
         running += keep[i];
     }
@@ -470,7 +468,7 @@ void quadTreeSim::compactArrays(const std::vector<uint8_t>& keep, int totalKeep)
         static std::vector<T> tmp;   // one per type instantiation, shared across threads
         tmp.resize(arr.size());
         #pragma omp parallel for
-        for (int i = 0; i < N; i++) {
+        for (int i = 0; i < bodies.N; i++) {
             if (keep[i]) tmp[newIdx[i]] = arr[i];
         }
         std::swap(arr, tmp);
@@ -480,7 +478,7 @@ void quadTreeSim::compactArrays(const std::vector<uint8_t>& keep, int totalKeep)
         (compact(*arrPtrs), ...);
     }, bodies.arrays());
 
-    N = totalKeep;
+    // N = totalKeep;
     bodies.N = totalKeep;
 }
 
@@ -554,9 +552,9 @@ void quadTreeSim::reorderBodies() {
     auto reorderArray = [&](auto& arr) {
         using T = typename std::remove_reference_t<decltype(arr)>::value_type;
         static std::vector<T> tmp;     // ← was thread_local
-        tmp.resize(N);
+        tmp.resize(bodies.N);
         #pragma omp parallel for
-        for (int i = 0; i < N; i++) tmp[i] = arr[buildIndices[i]];
+        for (int i = 0; i < bodies.N; i++) tmp[i] = arr[buildIndices[i]];
         std::swap(arr, tmp);
     };
 
@@ -614,11 +612,11 @@ quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double
     treeCold.resize(N * 8);
     buildIndices.resize(N);
     std::iota(buildIndices.begin(), buildIndices.end(), 0);
-
     neighbors.resize(N);
+    bodies.N = N;
 
     // Base body fill
-    for(int i = 0; i < N; i++) {
+    for(int i = 0; i < bodies.N; i++) {
         bodies.mass[i] = mass;
         bodies.size[i] = size;
         bodies.energy[i] = kB * INIT_TEMP / ((adiaGamma - 1) * mass);
@@ -636,7 +634,7 @@ quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double
     bodies.px[0] = 0.0f;
     bodies.py[0] = 0.0f;
     bodies.diffuse[0] = 0;
-    
+
 
     // for (int i = 1; i < 7; i++) {
     //     bodies.mass[i] = 0.5;
@@ -646,7 +644,7 @@ quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double
 
     // Initialize into stable orbit
     buildTree();
-    for(int i = 0; i < N; i++) {
+    for(int i = 0; i < bodies.N; i++) {
         computeAccel(i, init_theta, bodies.ax, bodies.ay, false, nullptr);
     }
     setOrbitalVel(bodies, 0, 0);
@@ -655,7 +653,7 @@ quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double
     double totMass = 0;
     Eigen::Vector4d com(0.0, 0.0, 0.0, 0.0);
     Eigen::Vector2f cent(viewW/2, viewH/2);
-    for (int i = 0; i < N; i++) {
+    for (int i = 0; i < bodies.N; i++) {
         com[0] += bodies.px[i] * bodies.mass[i];
         com[1] += bodies.py[i] * bodies.mass[i];
         com[2] += bodies.vx[i] * bodies.mass[i];
@@ -663,7 +661,7 @@ quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double
         totMass += bodies.mass[i];
     }
     com /= totMass;
-    for (int i = 0; i < N; i++) {
+    for (int i = 0; i < bodies.N; i++) {
         bodies.px[i] += -com[0] + cent[0];
         bodies.py[i] += -com[1] + cent[1];
         bodies.vx[i] += -com[2];
@@ -672,7 +670,7 @@ quadTreeSim::quadTreeSim(int N_, double mass, double size, double viewW_, double
 
     // Remove central body velocity
     int centralIdx = 0;
-    for (int i = 0; i < N; i++)
+    for (int i = 0; i < bodies.N; i++)
         if (bodies.mass[i] > 10.0f) { centralIdx = i; break; }
     bodies.vx[centralIdx] = 0; bodies.vy[centralIdx] = 0;
 }
