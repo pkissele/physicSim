@@ -15,8 +15,6 @@ def run_total(path: Path) -> float:
 
 
 folder = Path(sys.argv[1])
-out_csv = Path(sys.argv[2]) if len(sys.argv) > 2 else folder / "scaling.csv"
-out_png = folder / "scaling.png"
 
 by_n = defaultdict(list)
 for entry in sorted(folder.iterdir()):
@@ -34,7 +32,7 @@ stds = np.array([np.std(by_n[n], ddof=1) if len(by_n[n]) > 1 else 0.0 for n in N
 slope, intercept = np.polyfit(np.log(Ns), np.log(means), 1)
 
 fig, ax = plt.subplots(figsize=(7, 5))
-ax.errorbar(Ns, means, yerr=stds, fmt="o", color="#6a3fbf", markersize=7, capsize=4, label="Measured")
+ax.errorbar(Ns, means, fmt="o", color="#6a3fbf", markersize=7, capsize=4, label="Measured")
 
 fit_N = np.linspace(Ns.min(), Ns.max(), 200)
 ax.plot(fit_N, np.exp(intercept) * fit_N ** slope, "--", color="#c44fa0", label=f"exponent = {slope:.2f}")
@@ -49,5 +47,3 @@ plt.tight_layout()
 plt.show()
 
 print(f"exponent = {slope:.3f}")
-print(f"wrote {out_csv}")
-print(f"wrote {out_png}")

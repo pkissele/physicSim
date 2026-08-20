@@ -23,7 +23,7 @@ namespace Consts {
     constexpr double mass = 0.0005;
     constexpr double centMass = 20;
     constexpr double bodySize = 5;
-    constexpr int runSteps = 600;
+    constexpr int runSteps = 150;
 
     constexpr float theta = 0.7;
     constexpr float init_theta = 0.4; // more accurate initialization
@@ -51,7 +51,7 @@ namespace Consts {
     //
     // Engine constants
     //
-    constexpr int SEED = 3;
+    constexpr int SEED = 2;
     // constexpr bool HEADLESS = false;
     constexpr int FPS_TARGET = 30;
     constexpr double FRAME_TARGET = 1000.0/FPS_TARGET;
